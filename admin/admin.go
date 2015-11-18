@@ -5,7 +5,7 @@ import (
 	"os"
 	//"reflect"
 
-	"github.com/adrianduke/configr"
+	"io/ioutil"
 
 	"github.com/jinzhu/gorm"
 
@@ -39,25 +39,15 @@ func init() {
 
 	paths = append(paths, "/")
 
-	configr.AddSource(configr.NewFileSource("config/admin.toml"))
-	if err := configr.Parse(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-		//TODO more graceful exit!
-	}
-
-	cfg, err := configr.Get("paths")
+	sections, err := ioutil.ReadDir("data")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 		//TODO more graceful exit!
 	}
-
-	if arr, ok := cfg.([]interface{}); ok {
-		for _, v := range arr {
-			if s, ok := v.(string); ok {
-				paths = append(paths, s)
-			}
+	for _, fi := range sections {
+		if fi.IsDir() {
+			paths = append(paths, "/"+fi.Name()+"/")
 		}
 	}
 
