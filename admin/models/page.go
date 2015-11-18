@@ -75,8 +75,6 @@ func (p *Page) AfterSave() (err error) {
 	if p.prevPath != p.Path || p.prevSlug != p.NameWithSlug.Slug {
 		sync.RemovePageRef(p.prevPath, p.prevSlug)
 	}
-	// TODO check if any images have been created
-
 	if false {
 		err = errors.New("Page AfterSave Error")
 	} else {
