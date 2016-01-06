@@ -1,11 +1,5 @@
 # HugoCMS
 
-## An experiment with [QOR](https://github.com/qor/)
+## An experiment with [Hugo](https://github.com/spf13/hugo) and [QOR](https://github.com/qor/qor)
 
-`$go run db/main.go`
-
-`$go run main.go`
-
-Hugo's `staticdir` needs to be configured as `public` (QOR Admin uploads files here)
-
-Which  means Hugo's `publishdir` needs to be configured to something other than `public`
+For example usage see [HugoCMSDemo](https://github.com/8legd/HugoCMSDemo)
