@@ -101,15 +101,10 @@ func SetupAdmin() *admin.Admin {
 	})
 	pages.Meta(&admin.Meta{Name: "ContentRows", Resource: rows})
 
-	// TODO maybe use config
-	var paths []string
-	paths = append(paths, "/a/")
-	paths = append(paths, "/b/")
-
-	pages.Meta(&admin.Meta{Name: "Path", Type: "select_one", Collection: paths})
+	pages.Meta(&admin.Meta{Name: "Path", Type: "select_one", Collection: config.QOR.Paths})
 
 	// define scopes for pages
-	for _, path := range paths {
+	for _, path := range config.QOR.Paths {
 		path := path // The anonymous function below captures the variable `path` not its value
 		// So because the range variable is re-assigned a value on each iteration, if we just used it,
 		// the actual value being used would just end up being the same (last value of iteration).

@@ -11,8 +11,9 @@ var (
 )
 
 type QORConfig struct {
-	Port int
-	DB   *gorm.DB
+	Port  int
+	DB    *gorm.DB
+	Paths []string
 }
 
 type HugoConfig struct {
@@ -38,6 +39,9 @@ func Parse() error {
 		return err
 	}
 	QOR.Port = port
+
+	// As a minumum add the root path for our site
+	QOR.Paths = append(QOR.Paths, "/")
 
 	hugoConf := configr.New()
 	hugoConf.AddSource(configr.NewFileSource("hugo.toml"))
@@ -88,6 +92,18 @@ func Parse() error {
 	}
 	if menu, ok := rawMenu.(map[string]interface{}); ok {
 		Hugo.Menu = menu
+		// Add additional site paths from main menu items
+		if rawMainMenu, ok := menu["main"]; ok {
+			if mainMenu, ok := rawMainMenu.([]map[string]interface{}); ok {
+				for _, item := range mainMenu {
+					if url, ok := item["url"].(string); ok {
+						if url != "" && url != "/" {
+							QOR.Paths = append(QOR.Paths, url)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return nil
