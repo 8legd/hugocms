@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/qor/qor/media_library"
+	"github.com/qor/media_library"
 )
 
 type ResponsiveImageStorage struct{ media_library.FileSystem }

@@ -4,7 +4,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/qor/qor/media_library"
+	"github.com/qor/media_library"
 )
 
 var fs media_library.FileSystem

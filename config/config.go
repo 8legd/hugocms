@@ -30,6 +30,7 @@ type HugoConfig struct {
 func Parse() error {
 
 	qorConf := configr.New()
+	qorConf.RegisterKey("port", "QOR admin port", 8000)
 	qorConf.AddSource(configr.NewFileSource("qor.toml"))
 	if err := qorConf.Parse(); err != nil {
 		return err
@@ -43,7 +44,16 @@ func Parse() error {
 	// As a minumum add the root path for our site
 	QOR.Paths = append(QOR.Paths, "/")
 
+	Hugo.MetaDataFormat = "toml"
+
 	hugoConf := configr.New()
+	hugoConf.RegisterKey("baseurl", "Hugo site baseurl", "/")
+	hugoConf.RegisterKey("staticdir", "Hugo site static dir", "static")
+	hugoConf.RegisterKey("publishdir", "Hugo site publish dir", "public")
+	hugoConf.RegisterKey("languageCode", "Hugo site languageCode", "en")
+	hugoConf.RegisterKey("disableRSS", "Hugo site disableRSS", true)
+	hugoConf.RegisterKey("menu", "Hugo site menus", make(map[string]interface{}))
+
 	hugoConf.AddSource(configr.NewFileSource("hugo.toml"))
 	if err := hugoConf.Parse(); err != nil {
 		return err
@@ -79,13 +89,6 @@ func Parse() error {
 	}
 	Hugo.DisableRSS = disableRSS
 
-	metaDataFormat, err := hugoConf.String("MetaDataFormat")
-	if err != nil {
-		return err
-	}
-	Hugo.MetaDataFormat = metaDataFormat
-
-	hugoConf.RegisterKey("menu", "menu", make(map[string]interface{}))
 	rawMenu, err := hugoConf.Get("menu")
 	if err != nil {
 		return err

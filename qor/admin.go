@@ -5,6 +5,7 @@ import (
 
 	//"github.com/astaxie/beego/session" TODO handle auth / session management
 	"github.com/jinzhu/gorm"
+	"github.com/qor/media_library"
 	"github.com/qor/qor"
 	"github.com/qor/qor/admin"
 	"github.com/qor/qor/resource"
@@ -59,8 +60,8 @@ func SetupAdmin() *admin.Admin {
 
 	result.SetAuth(Auth{})
 
-	// For QOR Admin's rich text editor
-	assetManager := result.AddResource(&admin.AssetManager{}, &admin.Config{Invisible: true})
+	// Add Asset Manager, for rich editor
+	assetManager := result.AddResource(&media_library.AssetManager{}, &admin.Config{Invisible: true})
 
 	users = result.AddResource(&models.User{}, &admin.Config{Name: "Users"})
 	users.IndexAttrs("ID", "Name")
