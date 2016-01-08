@@ -11,9 +11,10 @@ var (
 )
 
 type QORConfig struct {
-	Port  int
-	DB    *gorm.DB
-	Paths []string
+	Port     int
+	SiteName string
+	DB       *gorm.DB
+	Paths    []string
 }
 
 type HugoConfig struct {
@@ -31,6 +32,7 @@ func Parse() error {
 
 	qorConf := configr.New()
 	qorConf.RegisterKey("port", "QOR admin port", 8000)
+	qorConf.RegisterKey("sitename", "QOR admin site name", "QOR Admin")
 	qorConf.AddSource(configr.NewFileSource("qor.toml"))
 	if err := qorConf.Parse(); err != nil {
 		return err
@@ -40,6 +42,12 @@ func Parse() error {
 		return err
 	}
 	QOR.Port = port
+
+	sitename, err := qorConf.String("sitename")
+	if err != nil {
+		return err
+	}
+	QOR.SiteName = sitename
 
 	// As a minumum add the root path for our site
 	QOR.Paths = append(QOR.Paths, "/")

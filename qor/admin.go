@@ -11,6 +11,7 @@ import (
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
 	"github.com/qor/qor/validations"
+	"github.com/qor/sorting"
 
 	"github.com/8legd/hugocms/config"
 	"github.com/8legd/hugocms/qor/models"
@@ -56,9 +57,18 @@ func init() {
 
 func SetupAdmin() *admin.Admin {
 
+	// Setup Database for QOR Admin
+	sorting.RegisterCallbacks(config.QOR.DB)
+	validations.RegisterCallbacks(config.QOR.DB)
+	media_library.RegisterCallbacks(config.QOR.DB)
+
 	result := admin.New(&qor.Config{DB: config.QOR.DB})
 
+	result.SetSiteName(config.QOR.SiteName)
 	result.SetAuth(Auth{})
+
+	// TODO Add Dashboard
+	// result.AddMenu(&admin.Menu{Name: "Dashboard", Link: "/admin"})
 
 	// Add Asset Manager, for rich editor
 	assetManager := result.AddResource(&media_library.AssetManager{}, &admin.Config{Invisible: true})

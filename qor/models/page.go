@@ -7,10 +7,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/jinzhu/gorm"
-	"github.com/qor/slug"
 )
+
+var slugger = regexp.MustCompile("[^a-z0-9]+")
 
 type Page struct {
 	gorm.Model
@@ -19,9 +22,8 @@ type Page struct {
 	prevPath   string
 	MenuWeight uint
 
-	Name         string
-	NameWithSlug slug.Slug
-	prevSlug     string
+	Name     string
+	prevName string
 
 	SEO PageMeta
 
@@ -69,16 +71,23 @@ type PageSlideshowImage struct {
 	Image               SimpleImageStorage `sql:"type:varchar(4096)"`
 }
 
+func (p *Page) Slug() string {
+	if p.Name == "" {
+		return ""
+	}
+	return strings.Trim(slugger.ReplaceAllString(strings.ToLower(p.Name), "-"), "-")
+}
+
 func (p *Page) AfterFind() (err error) {
 	// handle renames
 	p.prevPath = p.Path
-	p.prevSlug = p.NameWithSlug.Slug
+	p.prevName = p.Name
 	return
 }
 
 func (p *Page) AfterSave() (err error) {
 	// handle renames
-	if p.prevPath != p.Path || p.prevSlug != p.NameWithSlug.Slug {
+	if p.prevPath != p.Path || p.prevName != p.Name {
 		p.syncRemoveRef()
 	}
 	if false {
@@ -100,7 +109,7 @@ func (p *Page) AfterDelete() (err error) {
 
 // Syncs creation and update events for a page with Hugo
 func (p *Page) syncWrite() (err error) {
-	var path = p.Path + p.NameWithSlug.Slug
+	var path = p.Path + p.Slug()
 	output, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
@@ -159,7 +168,8 @@ func (p *Page) syncRemoveRef() (err error) {
 	// this way the page will in effect be un-published
 	// TODO if after removing the content file the section directory is empty then
 	// also remove it to clear up (again the sections will remain in the data dir)
-	var filename = "content" + p.Path + p.NameWithSlug.Slug + ".json"
+	// TODO use hugo config to get content dir
+	var filename = "content" + p.Path + p.Slug() + ".json"
 	fmt.Printf("\nTODO remove %s \n", filename)
 	fmt.Printf("TODO and if required remove empty section dir %s \n", p.Path)
 	return
