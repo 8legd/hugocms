@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 
 	"github.com/8legd/hugocms/config"
 
@@ -123,9 +122,11 @@ func (s *Settings) AfterSave() (err error) {
 		// TODO use hugo config to get content dir
 		contentFile := "content/intro-video.html"
 		// If required, create content dir first
-		err = os.MkdirAll(filepath.Dir(contentFile), 0777)
-		if err != nil {
-			return err
+		if _, err := os.Stat("./content"); os.IsNotExist(err) {
+			err = os.MkdirAll("./content", os.ModePerm)
+			if err != nil {
+				return err
+			}
 		}
 		err = ioutil.WriteFile(contentFile, content, 0644)
 		if err != nil {

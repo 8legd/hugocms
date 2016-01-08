@@ -2,13 +2,11 @@ package models
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jinzhu/gorm"
 )
@@ -71,44 +69,63 @@ type PageSlideshowImage struct {
 	Image               SimpleImageStorage `sql:"type:varchar(4096)"`
 }
 
-func (p *Page) Slug() string {
-	if p.Name == "" {
+func slug(s string) string {
+	if s == "" {
 		return ""
 	}
-	return strings.Trim(slugger.ReplaceAllString(strings.ToLower(p.Name), "-"), "-")
+	return strings.Trim(slugger.ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-func (p *Page) AfterFind() (err error) {
+func (p *Page) Slug() string {
+	return slug(p.Name)
+}
+
+func (p *Page) PrevSlug() string {
+	return slug(p.prevName)
+}
+
+func (p *Page) AfterFind() error {
 	// handle renames
 	p.prevPath = p.Path
 	p.prevName = p.Name
-	return
+	return nil
 }
 
-func (p *Page) AfterSave() (err error) {
+func (p *Page) AfterSave() error {
 	// handle renames
-	if p.prevPath != p.Path || p.prevName != p.Name {
-		p.syncRemoveRef()
+	if p.prevPath != "" && (p.prevPath != p.Path || p.prevName != p.Name) {
+		// Remove content file from Hugo but rename data files in case we ever need to restore :)
+		// TODO use hugo config to get content dir
+		filename := "content" + p.prevPath + p.PrevSlug() + ".json"
+		if err := os.Remove(filename); err != nil {
+			return err
+		}
+		// TODO use hugo config to get data dir
+		filename = "data" + p.prevPath + p.PrevSlug() + ".json"
+		if err := os.Rename(filename, filename+".deleted_at_"+time.Now().Format("20060102150405")); err != nil {
+			return err
+		}
 	}
-	if false {
-		err = errors.New("Page AfterSave Error")
-	} else {
-		p.syncWrite()
-	}
-	return
+	return p.syncWrite()
 }
 
-func (p *Page) AfterDelete() (err error) {
-	if false {
-		err = errors.New("Page AfterDelete Error")
-	} else {
-		p.syncRemoveRef()
+func (p *Page) AfterDelete() error {
+	// Remove content file from Hugo but rename data files in case we ever need to restore :)
+	// TODO use hugo config to get content dir
+	filename := "content" + p.Path + p.Slug() + ".json"
+	if err := os.Remove(filename); err != nil {
+		return err
 	}
-	return
+	// TODO use hugo config to get data dir
+	filename = "data" + p.Path + p.Slug() + ".json"
+	if err := os.Rename(filename, filename+".deleted_at_"+time.Now().Format("20060102150405")); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Syncs creation and update events for a page with Hugo
-func (p *Page) syncWrite() (err error) {
+func (p *Page) syncWrite() error {
 	var path = p.Path + p.Slug()
 	output, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
@@ -117,10 +134,12 @@ func (p *Page) syncWrite() (err error) {
 	// Write the data file for Hugo
 	// TODO use hugo config to get data dir
 	dataFile := "data" + path + ".json"
-	// If required, create content dir first
-	err = os.MkdirAll(filepath.Dir(dataFile), 0777)
-	if err != nil {
-		return err
+	// If required, create data dir first
+	if _, err := os.Stat("./data"); os.IsNotExist(err) {
+		err = os.MkdirAll("./data", os.ModePerm)
+		if err != nil {
+			return err
+		}
 	}
 	err = ioutil.WriteFile(dataFile, output, 0644)
 	if err != nil {
@@ -150,27 +169,16 @@ func (p *Page) syncWrite() (err error) {
 	// TODO use hugo config to get content dir
 	contentFile := "content" + path + ".json"
 	// If required, create content dir first
-	err = os.MkdirAll(filepath.Dir(contentFile), 0777)
-	if err != nil {
-		return err
+	if _, err := os.Stat("./content"); os.IsNotExist(err) {
+		err = os.MkdirAll("./content", os.ModePerm)
+		if err != nil {
+			return err
+		}
 	}
 	err = ioutil.WriteFile(contentFile, content, 0644)
 	if err != nil {
 		return err
 	}
 
-	return
-}
-
-// Syncs rename or deletion of a page with Hugo
-func (p *Page) syncRemoveRef() (err error) {
-	// TODO just remove content file from Hugo (data files can remain)
-	// this way the page will in effect be un-published
-	// TODO if after removing the content file the section directory is empty then
-	// also remove it to clear up (again the sections will remain in the data dir)
-	// TODO use hugo config to get content dir
-	var filename = "content" + p.Path + p.Slug() + ".json"
-	fmt.Printf("\nTODO remove %s \n", filename)
-	fmt.Printf("TODO and if required remove empty section dir %s \n", p.Path)
-	return
+	return nil
 }
