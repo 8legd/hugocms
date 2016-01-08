@@ -92,7 +92,7 @@ type SettingsSidebarImage struct {
 	Link              string
 }
 
-func (s *Settings) AfterSave() (err error) {
+func (s *Settings) AfterSave() error {
 
 	// If we have one, fetch the associated IntroVideo's Video model
 	// (We need to do this because of the way the releationship is for SettingsIntroVideo > Video)
@@ -149,5 +149,5 @@ func (s *Settings) AfterSave() (err error) {
 		return err
 	}
 
-	return
+	return nil
 }
