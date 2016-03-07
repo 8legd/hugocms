@@ -10,8 +10,8 @@ import (
 	"github.com/qor/qor/admin"
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
-	"github.com/qor/qor/validations"
 	"github.com/qor/sorting"
+	"github.com/qor/validations"
 
 	"github.com/8legd/hugocms/config"
 	"github.com/8legd/hugocms/qor/models"

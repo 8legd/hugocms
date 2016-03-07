@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/adrianduke/configr"
+	_ "github.com/adrianduke/configr/sources/file/toml"
 	"github.com/jinzhu/gorm"
 )
 
@@ -33,7 +34,7 @@ func Parse() error {
 	qorConf := configr.New()
 	qorConf.RegisterKey("port", "QOR admin port", 8000)
 	qorConf.RegisterKey("sitename", "QOR admin site name", "QOR Admin")
-	qorConf.AddSource(configr.NewFileSource("qor.toml"))
+	qorConf.AddSource(configr.NewFile("qor.toml"))
 	if err := qorConf.Parse(); err != nil {
 		return err
 	}
@@ -62,7 +63,7 @@ func Parse() error {
 	hugoConf.RegisterKey("disableRSS", "Hugo site disableRSS", true)
 	hugoConf.RegisterKey("menu", "Hugo site menus", make(map[string]interface{}))
 
-	hugoConf.AddSource(configr.NewFileSource("hugo.toml"))
+	hugoConf.AddSource(configr.NewFile("hugo.toml"))
 	if err := hugoConf.Parse(); err != nil {
 		return err
 	}
