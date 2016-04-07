@@ -28,3 +28,20 @@ func (s SimpleImageStorage) Store(url string, option *media_library.Option, read
 func (s SimpleImageStorage) Retrieve(url string) (*os.File, error) {
 	return fs.Retrieve(url)
 }
+
+type LogoImageStorage struct{ SimpleImageStorage }
+
+func (LogoImageStorage) GetSizes() map[string]media_library.Size {
+	return map[string]media_library.Size{
+		"mobile":  {Width: 75, Height: 50},
+		"desktop": {Width: 254, Height: 170},
+	}
+}
+
+type VideoImageStorage struct{ SimpleImageStorage }
+
+type HeaderImageStorage struct{ SimpleImageStorage }
+
+type SidebarImageStorage struct{ SimpleImageStorage }
+
+type ContentImageStorage struct{ SimpleImageStorage }

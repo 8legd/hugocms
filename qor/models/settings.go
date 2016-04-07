@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/8legd/hugocms/config"
 
@@ -16,8 +18,9 @@ type Settings struct {
 	Logo           SettingsLogo
 	ContactDetails SettingsContactDetails
 	Header         SettingsHeader
+	CallToAction   SettingsCallToAction
 	IntroVideo     SettingsIntroVideo
-	Sidebar        SettingsSidebar
+	Sidebar        []SettingsSidebarContent
 	Copyright      string
 	Footer         string `sql:"size:2000"`
 }
@@ -27,10 +30,8 @@ type SettingsLogo struct {
 
 	SettingsID uint
 
-	Text  string
 	Image LogoImageStorage `sql:"type:varchar(4096)"`
 	Alt   string
-	Link  string
 }
 
 type SettingsContactDetails struct {
@@ -38,21 +39,29 @@ type SettingsContactDetails struct {
 
 	SettingsID uint
 
-	Title string
-	Tel   string
-	Email string
+	Title               string
+	Tel                 string
+	Email               string
+	OpeningHoursDesktop string `sql:"size:2000"`
+	OpeningHoursMobile  string
 }
 
 type SettingsHeader struct {
 	gorm.Model
 
 	SettingsID uint
+	Image      HeaderImageStorage `sql:"type:varchar(4096)"`
+	Alt        string
+	Link       string
+}
 
-	TextContent string `sql:"size:2000"`
-	TextMobile  string
-	Image       SimpleImageStorage `sql:"type:varchar(4096)"`
-	Alt         string
-	Link        string
+type SettingsCallToAction struct {
+	gorm.Model
+
+	SettingsID uint
+
+	ActionText string `sql:"size:2000"`
+	Link       string
 }
 
 type SettingsIntroVideo struct {
@@ -60,10 +69,6 @@ type SettingsIntroVideo struct {
 	SettingsID uint
 	VideoID    uint
 	Video      Video
-	Title      string
-	Length     string
-	Image      SimpleImageStorage `sql:"type:varchar(4096)"`
-	Alt        string
 	SEO        SettingsIntroVideoMeta
 }
 
@@ -76,29 +81,23 @@ type SettingsIntroVideoMeta struct {
 	Description string
 }
 
-type SettingsSidebar struct {
+type SettingsSidebarContent struct {
 	gorm.Model
 
 	SettingsID uint
-	Images     []SettingsSidebarImage
-}
 
-type SettingsSidebarImage struct {
-	gorm.Model
-
-	SettingsSidebarID uint
-	Image             SimpleImageStorage `sql:"type:varchar(4096)"`
-	Alt               string
-	Link              string
+	Image SidebarImageStorage `sql:"type:varchar(4096)"`
+	Alt   string
+	Link  string
 }
 
 func (s *Settings) AfterSave() error {
 
 	// If we have one, fetch the associated IntroVideo's Video model
-	// (We need to do this because of the way the releationship is for SettingsIntroVideo > Video)
+	// (We need to do this because of the way the relationship is for SettingsIntroVideo > Video)
 	if s.IntroVideo.VideoID > 0 {
 		var video Video
-		config.QOR.DB.First(&video, s.IntroVideo.VideoID)
+		config.DB.First(&video, s.IntroVideo.VideoID)
 		s.IntroVideo.Video = video
 
 		// Save to Intro Video content page
@@ -139,6 +138,16 @@ func (s *Settings) AfterSave() error {
 	config := config.Hugo
 	config.Params = make(map[string]interface{})
 	config.Params["Settings"] = s
+	rs := make(map[string]map[string]interface{})
+	config.Params["ResponsiveSettings"] = rs
+	if s.Logo.Image.Url != "" {
+		rsl := make(map[string]interface{})
+		rs["Logo"] = rsl
+		ext := filepath.Ext(s.Logo.Image.Url)
+		for k, _ := range s.Logo.Image.CropOptions {
+			rsl[k] = strings.Replace(s.Logo.Image.Url, ext, "."+k+ext, 1)
+		}
+	}
 
 	output, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

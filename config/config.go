@@ -4,17 +4,19 @@ import (
 	"github.com/adrianduke/configr"
 	_ "github.com/adrianduke/configr/sources/file/toml"
 	"github.com/jinzhu/gorm"
+	"github.com/qor/admin"
 )
 
 var (
 	QOR  QORConfig
 	Hugo HugoConfig
+	DB   *gorm.DB
+	Auth admin.Auth
 )
 
 type QORConfig struct {
 	Port     int
 	SiteName string
-	DB       *gorm.DB
 	Paths    []string
 }
 
@@ -29,12 +31,12 @@ type HugoConfig struct {
 	Params         map[string]interface{}
 }
 
-func Parse() error {
+func Setup(qorConfigFile string, hugoConfigFile string, db *gorm.DB, auth admin.Auth) error {
 
 	qorConf := configr.New()
 	qorConf.RegisterKey("port", "QOR admin port", 8000)
 	qorConf.RegisterKey("sitename", "QOR admin site name", "QOR Admin")
-	qorConf.AddSource(configr.NewFile("qor.toml"))
+	qorConf.AddSource(configr.NewFile(qorConfigFile))
 	if err := qorConf.Parse(); err != nil {
 		return err
 	}
@@ -53,7 +55,7 @@ func Parse() error {
 	// As a minumum add the root path for our site
 	QOR.Paths = append(QOR.Paths, "/")
 
-	Hugo.MetaDataFormat = "toml"
+	Hugo.MetaDataFormat = "json"
 
 	hugoConf := configr.New()
 	hugoConf.RegisterKey("baseurl", "Hugo site baseurl", "/")
@@ -63,7 +65,7 @@ func Parse() error {
 	hugoConf.RegisterKey("disableRSS", "Hugo site disableRSS", true)
 	hugoConf.RegisterKey("menu", "Hugo site menus", make(map[string]interface{}))
 
-	hugoConf.AddSource(configr.NewFile("hugo.toml"))
+	hugoConf.AddSource(configr.NewFile(hugoConfigFile))
 	if err := hugoConf.Parse(); err != nil {
 		return err
 	}
@@ -117,6 +119,10 @@ func Parse() error {
 			}
 		}
 	}
+
+	DB = db
+
+	Auth = auth
 
 	return nil
 

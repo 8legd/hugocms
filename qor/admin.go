@@ -3,11 +3,10 @@ package qor
 import (
 	"strings"
 
-	//"github.com/astaxie/beego/session" TODO handle auth / session management
 	"github.com/jinzhu/gorm"
+	"github.com/qor/admin"
 	"github.com/qor/media_library"
 	"github.com/qor/qor"
-	"github.com/qor/qor/admin"
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
 	"github.com/qor/sorting"
@@ -20,11 +19,10 @@ import (
 var (
 	Tables []interface{}
 
-	users    *admin.Resource
-	pages    *admin.Resource
-	videos   *admin.Resource
-	header   *admin.Resource
-	settings *admin.Resource
+	settings   *admin.Resource
+	videos     *admin.Resource
+	slideshows *admin.Resource
+	pages      *admin.Resource
 )
 
 func init() {
@@ -32,25 +30,26 @@ func init() {
 	// Define database tables used by CMS
 	Tables = []interface{}{
 
-		&models.User{},
-		&models.UserImage{},
-
 		&models.Settings{},
 		&models.SettingsLogo{},
 		&models.SettingsContactDetails{},
 		&models.SettingsHeader{},
-		&models.SettingsSidebar{},
+		&models.SettingsCallToAction{},
 		&models.SettingsIntroVideo{},
 		&models.SettingsIntroVideoMeta{},
-		&models.SettingsSidebarImage{},
+		&models.SettingsSidebarContent{},
 
 		&models.Video{},
 
+		&models.Slideshow{},
+		&models.SlideshowSlide{},
+
 		&models.Page{},
 		&models.PageMeta{},
-		&models.PageContentRow{},
 		&models.PageContentColumn{},
-		&models.PageSlideshowImage{},
+		&models.PageContentColumnVideo{},
+		&models.PageContentColumnSlideshow{},
+		&models.PageLink{},
 	}
 
 }
@@ -58,35 +57,56 @@ func init() {
 func SetupAdmin() *admin.Admin {
 
 	// Setup Database for QOR Admin
-	sorting.RegisterCallbacks(config.QOR.DB)
-	validations.RegisterCallbacks(config.QOR.DB)
-	media_library.RegisterCallbacks(config.QOR.DB)
+	sorting.RegisterCallbacks(config.DB)
+	validations.RegisterCallbacks(config.DB)
+	media_library.RegisterCallbacks(config.DB)
 
-	result := admin.New(&qor.Config{DB: config.QOR.DB})
+	result := admin.New(&qor.Config{DB: config.DB})
 
 	result.SetSiteName(config.QOR.SiteName)
-	result.SetAuth(Auth{})
-
-	// TODO Add Dashboard
-	// result.AddMenu(&admin.Menu{Name: "Dashboard", Link: "/admin"})
+	result.SetAuth(config.Auth)
 
 	// Add Asset Manager, for rich editor
 	assetManager := result.AddResource(&media_library.AssetManager{}, &admin.Config{Invisible: true})
 
-	users = result.AddResource(&models.User{}, &admin.Config{Name: "Users"})
-	users.IndexAttrs("ID", "Name")
-	users.EditAttrs("Name", "Image")
+	image := result.NewResource(&models.PageContentColumnImage{}, &admin.Config{Invisible: true})
+	image.Meta(&admin.Meta{
+		Name: "Alignment",
+		Type: "select_one",
+		Collection: func(o interface{}, context *qor.Context) [][]string {
+			var result [][]string
+			result = append(result, []string{"media-left media-top", "left top"})
+			result = append(result, []string{"media-left media-middle", "left middle"})
+			result = append(result, []string{"media-left media-bottom", "left bottom"})
+			result = append(result, []string{"media-right media-top", "right top"})
+			result = append(result, []string{"media-right media-middle", "right middle"})
+			result = append(result, []string{"media-right media-bottom", "right bottom"})
+			return result
+		},
+	})
+	image.NewAttrs("-PageContentColumn")
+	image.EditAttrs("-PageContentColumn")
 
 	columns := result.NewResource(&models.PageContentColumn{}, &admin.Config{Invisible: true})
+	columns.Meta(&admin.Meta{
+		Name: "Width",
+		Type: "select_one",
+		Collection: func(o interface{}, context *qor.Context) [][]string {
+			var result [][]string
+			result = append(result, []string{"col-md-6", "50% on desktop, 100% on mobile"})
+			result = append(result, []string{"col-md-12", "100% on desktop, 100% on mobile"})
+			return result
+		},
+	})
 	columns.Meta(&admin.Meta{Name: "TextContent", Type: "rich_editor", Resource: assetManager})
-	columns.Meta(&admin.Meta{Name: "VideoOptions", Type: "select_one", Collection: []string{"Auto Play"}})
-	columns.NewAttrs("-ContentRow")
-	columns.EditAttrs("-ContentRow", "Heading", "Video")
+	columns.Meta(&admin.Meta{Name: "ImageContent", Resource: image})
+	columns.NewAttrs("-Page")
+	columns.EditAttrs("-Page")
 
-	rows := result.NewResource(&models.PageContentRow{}, &admin.Config{Invisible: true})
-	rows.Meta(&admin.Meta{Name: "ContentColumns", Resource: columns})
-	rows.NewAttrs("-Page")
-	rows.EditAttrs("-Page")
+	links := result.NewResource(&models.PageLink{}, &admin.Config{Invisible: true})
+	links.Meta(&admin.Meta{Name: "LinkText", Type: "rich_editor", Resource: assetManager})
+	links.NewAttrs("-Page")
+	links.EditAttrs("-Page")
 
 	pages = result.AddResource(&models.Page{}, &admin.Config{Name: "Pages"})
 	pages.IndexAttrs("Path", "Name")
@@ -110,7 +130,10 @@ func SetupAdmin() *admin.Admin {
 
 		},
 	})
-	pages.Meta(&admin.Meta{Name: "ContentRows", Resource: rows})
+
+	pages.Meta(&admin.Meta{Name: "ContentColumns", Resource: columns})
+
+	pages.Meta(&admin.Meta{Name: "Links", Resource: links})
 
 	pages.Meta(&admin.Meta{Name: "Path", Type: "select_one", Collection: config.QOR.Paths})
 
@@ -142,32 +165,67 @@ func SetupAdmin() *admin.Admin {
 				return validations.NewError(record, "Path", "Path can not be blank")
 			}
 		}
+
+		// TODO make SEO required
+
+		// if we have content check it is valid
+		if meta := metaValues.Get("ContentRows"); meta != nil {
+			if metas := meta.MetaValues.Values; len(metas) > 0 {
+				for _, v := range metas {
+					if v.Name == "ContentColumns" {
+						// first collect information on the fields we need to check
+						img := ""
+						imgPos := ""
+
+						if fields := v.MetaValues.Values; len(fields) > 0 {
+							for _, f := range fields {
+
+								if f.Name == "Image" && f.Value != nil {
+									for _, s := range f.Value.([]string) {
+										if s != "" {
+											img = s
+										}
+									}
+								}
+								if f.Name == "Alignment" && f.Value != nil {
+									for _, s := range f.Value.([]string) {
+										if s != "" {
+											imgPos = s
+										}
+									}
+								}
+							}
+						}
+
+						// all images need an image position
+
+						if img != "" && imgPos == "" {
+							return validations.NewError(record, "ContentRows", "All Images need an Image Position")
+						}
+					}
+				}
+			}
+
+		}
 		return nil
 	})
 
 	videos = result.AddResource(&models.Video{}, &admin.Config{Name: "Videos"})
 	videos.IndexAttrs("Name")
 
-	header := result.NewResource(&models.SettingsHeader{}, &admin.Config{Invisible: true})
-	header.Meta(&admin.Meta{Name: "TextContent", Type: "rich_editor", Resource: assetManager})
+	slideshows = result.AddResource(&models.Slideshow{}, &admin.Config{Name: "Slideshow"})
+	slideshows.IndexAttrs("Name")
+
+	contact := result.NewResource(&models.SettingsContactDetails{}, &admin.Config{Invisible: true})
+	contact.Meta(&admin.Meta{Name: "OpeningHoursDesktop", Type: "rich_editor", Resource: assetManager})
+
+	callToAction := result.NewResource(&models.SettingsCallToAction{}, &admin.Config{Invisible: true})
+	callToAction.Meta(&admin.Meta{Name: "ActionText", Type: "rich_editor", Resource: assetManager})
 
 	settings = result.AddResource(&models.Settings{}, &admin.Config{Singleton: true})
-	settings.Meta(&admin.Meta{Name: "Header", Resource: header})
+	settings.Meta(&admin.Meta{Name: "ContactDetails", Resource: contact})
+	settings.Meta(&admin.Meta{Name: "CallToAction", Resource: callToAction})
 	settings.Meta(&admin.Meta{Name: "Footer", Type: "rich_editor", Resource: assetManager})
 
 	return result
-}
-
-type Auth struct{}
-
-func (Auth) LoginURL(c *admin.Context) string {
-	return "/admin"
-}
-
-func (Auth) LogoutURL(c *admin.Context) string {
-	return "/admin"
-}
-
-func (Auth) GetCurrentUser(c *admin.Context) qor.CurrentUser {
-	return &models.User{Name: "Admin"}
 }

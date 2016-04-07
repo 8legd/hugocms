@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/8legd/hugocms/config"
+
 	"github.com/jinzhu/gorm"
 )
 
@@ -25,7 +27,9 @@ type Page struct {
 
 	SEO PageMeta
 
-	ContentRows []PageContentRow
+	ContentColumns []PageContentColumn
+
+	Links []PageLink
 }
 
 type PageMeta struct {
@@ -37,36 +41,52 @@ type PageMeta struct {
 	Description string
 }
 
-type PageContentRow struct {
+type PageContentColumn struct {
 	gorm.Model
 
 	PageID uint
 
-	ContentColumns []PageContentColumn
+	Width            string
+	Heading          string
+	TextContent      string `sql:"size:2000"`
+	ImageContent     []PageContentColumnImage
+	Link             string
+	VideoContent     PageContentColumnVideo
+	SlideshowContent PageContentColumnSlideshow
 }
 
-type PageContentColumn struct {
-	gorm.Model
-
-	PageContentRowID uint
-
-	Heading           string
-	TextContent       string             `sql:"size:2000"`
-	Image             SimpleImageStorage `sql:"type:varchar(4096)"`
-	ImageOptions      string
-	Link              string
-	VideoID           uint
-	Video             Video
-	VideoOptions      string
-	Slideshow         []PageSlideshowImage
-	SlideshowInterval int
-}
-
-type PageSlideshowImage struct {
+type PageContentColumnImage struct {
 	gorm.Model
 
 	PageContentColumnID uint
-	Image               SimpleImageStorage `sql:"type:varchar(4096)"`
+	Image               ContentImageStorage `sql:"type:varchar(4096)"`
+	Alt                 string
+	Alignment           string
+}
+
+type PageContentColumnVideo struct {
+	gorm.Model
+
+	PageContentColumnID uint
+	VideoID             uint
+	Video               Video
+}
+
+type PageContentColumnSlideshow struct {
+	gorm.Model
+
+	PageContentColumnID uint
+	SlideshowID         uint
+	Slideshow           Slideshow
+}
+
+type PageLink struct {
+	gorm.Model
+
+	PageID uint
+
+	LinkText string `sql:"size:2000"`
+	Link     string
 }
 
 func slug(s string) string {
@@ -126,6 +146,17 @@ func (p *Page) AfterDelete() error {
 
 // Syncs creation and update events for a page with Hugo
 func (p *Page) syncWrite() error {
+
+	// If we have one, fetch the associated Video's model
+	// (We need to do this because of the way the relationship is for SettingsIntroVideo > Video)
+	for _, c := range p.ContentColumns {
+		if c.VideoContent.VideoID > 0 {
+			var video Video
+			config.DB.First(&video, c.VideoContent.VideoID)
+			c.VideoContent.Video = video
+		}
+	}
+
 	var path = p.Path + p.Slug()
 	output, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
@@ -146,11 +177,15 @@ func (p *Page) syncWrite() error {
 		return err
 	}
 	// Write the content file for Hugo
-	// TODO if p.MenuWeight < 1 hidden?
-	menuWeight := make(map[string]uint)
-	menuWeight["weight"] = p.MenuWeight
 	menu := make(map[string]map[string]uint)
-	menu["about_us"] = menuWeight
+	if p.MenuWeight > 0 {
+		menuWeight := make(map[string]uint)
+		menuWeight["weight"] = p.MenuWeight
+		if p.Path != "" && p.Path != "/" {
+			menuName := slug(p.Path)
+			menu[menuName] = menuWeight
+		}
+	}
 	content, err := json.MarshalIndent(
 		struct {
 			Title       string                     `json:"Title"`
