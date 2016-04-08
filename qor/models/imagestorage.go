@@ -12,7 +12,7 @@ var opt media_library.Option
 
 func init() {
 	opt = make(map[string]string)
-	opt["path"] = "./static"
+	opt["PATH"] = "./static"
 }
 
 type SimpleImageStorage struct{ media_library.Base }

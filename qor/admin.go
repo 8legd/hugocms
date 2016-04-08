@@ -1,6 +1,8 @@
 package qor
 
 import (
+	"fmt"
+	"mime/multipart"
 	"strings"
 
 	"github.com/jinzhu/gorm"
@@ -47,6 +49,7 @@ func init() {
 		&models.Page{},
 		&models.PageMeta{},
 		&models.PageContentColumn{},
+		&models.PageContentColumnImage{},
 		&models.PageContentColumnVideo{},
 		&models.PageContentColumnSlideshow{},
 		&models.PageLink{},
@@ -169,40 +172,48 @@ func SetupAdmin() *admin.Admin {
 		// TODO make SEO required
 
 		// if we have content check it is valid
-		if meta := metaValues.Get("ContentRows"); meta != nil {
+		if meta := metaValues.Get("ContentColumns"); meta != nil {
 			if metas := meta.MetaValues.Values; len(metas) > 0 {
 				for _, v := range metas {
-					if v.Name == "ContentColumns" {
-						// first collect information on the fields we need to check
-						img := ""
-						imgPos := ""
 
+					// All image content need alt text and alignment
+					if v.Name == "ImageContent" {
 						if fields := v.MetaValues.Values; len(fields) > 0 {
+							img := false
+							imgAlt := false
+							imgAlign := false
 							for _, f := range fields {
-
+								fmt.Println(f.Name)
+								fmt.Println(f.Value)
 								if f.Name == "Image" && f.Value != nil {
-									for _, s := range f.Value.([]string) {
-										if s != "" {
-											img = s
+									if v, ok := f.Value.([]*multipart.FileHeader); ok {
+										if len(v) > 0 {
+											img = true
+										}
+									}
+								}
+								if f.Name == "Alt" && f.Value != nil {
+									if v, ok := f.Value.([]string); ok {
+										if len(v) > 0 && v[0] != "" {
+											imgAlt = true
 										}
 									}
 								}
 								if f.Name == "Alignment" && f.Value != nil {
-									for _, s := range f.Value.([]string) {
-										if s != "" {
-											imgPos = s
+									if v, ok := f.Value.([]string); ok {
+										if len(v) > 0 && v[0] != "" {
+											imgAlign = true
 										}
 									}
 								}
 							}
+							if img && (!imgAlt || !imgAlign) {
+								return validations.NewError(record, "ContentColumns", "All Image Content requires Alt Text and Alignment")
+							}
 						}
 
-						// all images need an image position
-
-						if img != "" && imgPos == "" {
-							return validations.NewError(record, "ContentRows", "All Images need an Image Position")
-						}
 					}
+
 				}
 			}
 
@@ -210,11 +221,13 @@ func SetupAdmin() *admin.Admin {
 		return nil
 	})
 
+	slideshows = result.AddResource(&models.Slideshow{}, &admin.Config{Name: "Slideshow"})
+	slideshows.IndexAttrs("Name")
+
 	videos = result.AddResource(&models.Video{}, &admin.Config{Name: "Videos"})
 	videos.IndexAttrs("Name")
 
-	slideshows = result.AddResource(&models.Slideshow{}, &admin.Config{Name: "Slideshow"})
-	slideshows.IndexAttrs("Name")
+	// Add Settings
 
 	contact := result.NewResource(&models.SettingsContactDetails{}, &admin.Config{Invisible: true})
 	contact.Meta(&admin.Meta{Name: "OpeningHoursDesktop", Type: "rich_editor", Resource: assetManager})
@@ -222,10 +235,16 @@ func SetupAdmin() *admin.Admin {
 	callToAction := result.NewResource(&models.SettingsCallToAction{}, &admin.Config{Invisible: true})
 	callToAction.Meta(&admin.Meta{Name: "ActionText", Type: "rich_editor", Resource: assetManager})
 
+	// Because this is a singleton a single record must already exist in the database (there is no create through QOR admin just update)
+	config.DB.FirstOrCreate(&models.Settings{})
+
 	settings = result.AddResource(&models.Settings{}, &admin.Config{Singleton: true})
 	settings.Meta(&admin.Meta{Name: "ContactDetails", Resource: contact})
 	settings.Meta(&admin.Meta{Name: "CallToAction", Resource: callToAction})
 	settings.Meta(&admin.Meta{Name: "Footer", Type: "rich_editor", Resource: assetManager})
+
+	// Add Translations
+	result.AddResource(config.I18n, &admin.Config{})
 
 	return result
 }

@@ -5,6 +5,8 @@ import (
 	_ "github.com/adrianduke/configr/sources/file/toml"
 	"github.com/jinzhu/gorm"
 	"github.com/qor/admin"
+	"github.com/qor/i18n"
+	"github.com/qor/i18n/backends/database"
 )
 
 var (
@@ -12,6 +14,7 @@ var (
 	Hugo HugoConfig
 	DB   *gorm.DB
 	Auth admin.Auth
+	I18n *i18n.I18n
 )
 
 type QORConfig struct {
@@ -121,6 +124,7 @@ func Setup(qorConfigFile string, hugoConfigFile string, db *gorm.DB, auth admin.
 	}
 
 	DB = db
+	I18n = i18n.New(database.New(db))
 
 	Auth = auth
 
