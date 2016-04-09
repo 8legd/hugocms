@@ -23,6 +23,7 @@ type Settings struct {
 	Sidebar        []SettingsSidebarContent
 	Copyright      string
 	Footer         string `sql:"size:2000"`
+	APIKeys        SettingsAPIKey
 }
 
 type SettingsLogo struct {
@@ -89,6 +90,16 @@ type SettingsSidebarContent struct {
 	Image SidebarImageStorage `sql:"type:varchar(4096)"`
 	Alt   string
 	Link  string
+}
+
+type SettingsAPIKey struct {
+	gorm.Model
+
+	SettingsID uint
+
+	Analytics string
+	Tracking  string
+	LiveChat  string
 }
 
 func (s *Settings) AfterSave() error {

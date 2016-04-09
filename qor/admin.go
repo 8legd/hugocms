@@ -39,6 +39,7 @@ func init() {
 		&models.SettingsIntroVideo{},
 		&models.SettingsIntroVideoMeta{},
 		&models.SettingsSidebarContent{},
+		&models.SettingsAPIKey{},
 
 		&models.Video{},
 
