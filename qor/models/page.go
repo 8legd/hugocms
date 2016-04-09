@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/8legd/hugocms/config"
-
 	"github.com/jinzhu/gorm"
 )
 
@@ -21,6 +19,7 @@ type Page struct {
 	Path       string
 	prevPath   string
 	MenuWeight uint
+	Links      []PageLink
 
 	Name     string
 	prevName string
@@ -28,8 +27,15 @@ type Page struct {
 	SEO PageMeta
 
 	ContentColumns []PageContentColumn
+}
 
-	Links []PageLink
+type PageLink struct {
+	gorm.Model
+
+	PageID uint
+
+	LinkText string `sql:"size:2000"`
+	Link     string
 }
 
 type PageMeta struct {
@@ -46,47 +52,17 @@ type PageContentColumn struct {
 
 	PageID uint
 
-	Width            string
-	Heading          string
-	TextContent      string `sql:"size:2000"`
-	ImageContent     []PageContentColumnImage
-	Link             string
-	VideoContent     PageContentColumnVideo
-	SlideshowContent PageContentColumnSlideshow
-}
-
-type PageContentColumnImage struct {
-	gorm.Model
-
-	PageContentColumnID uint
-	Image               ContentImageStorage `sql:"type:varchar(4096)"`
-	Alt                 string
-	Alignment           string
-}
-
-type PageContentColumnVideo struct {
-	gorm.Model
-
-	PageContentColumnID uint
-	VideoID             uint
-	Video               Video
-}
-
-type PageContentColumnSlideshow struct {
-	gorm.Model
-
-	PageContentColumnID uint
-	SlideshowID         uint
-	Slideshow           Slideshow
-}
-
-type PageLink struct {
-	gorm.Model
-
-	PageID uint
-
-	LinkText string `sql:"size:2000"`
-	Link     string
+	ColumnWidth   string
+	ColumnHeading string
+	ColumnText    string              `sql:"size:2000"`
+	Image         ContentImageStorage `sql:"type:varchar(4096)"`
+	Alt           string
+	Alignment     string
+	VideoID       uint
+	Video         Video
+	SlideshowID   uint
+	Slideshow     Slideshow
+	ColumnLink    string
 }
 
 func slug(s string) string {
@@ -146,17 +122,6 @@ func (p *Page) AfterDelete() error {
 
 // Syncs creation and update events for a page with Hugo
 func (p *Page) syncWrite() error {
-
-	// If we have one, fetch the associated Video's model
-	// (We need to do this because of the way the relationship is for SettingsIntroVideo > Video)
-	for _, c := range p.ContentColumns {
-		if c.VideoContent.VideoID > 0 {
-			var video Video
-			config.DB.First(&video, c.VideoContent.VideoID)
-			c.VideoContent.Video = video
-		}
-	}
-
 	var path = p.Path + p.Slug()
 	output, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {

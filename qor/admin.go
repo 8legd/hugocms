@@ -1,7 +1,6 @@
 package qor
 
 import (
-	"fmt"
 	"mime/multipart"
 	"strings"
 
@@ -49,9 +48,6 @@ func init() {
 		&models.Page{},
 		&models.PageMeta{},
 		&models.PageContentColumn{},
-		&models.PageContentColumnImage{},
-		&models.PageContentColumnVideo{},
-		&models.PageContentColumnSlideshow{},
 		&models.PageLink{},
 	}
 
@@ -72,8 +68,19 @@ func SetupAdmin() *admin.Admin {
 	// Add Asset Manager, for rich editor
 	assetManager := result.AddResource(&media_library.AssetManager{}, &admin.Config{Invisible: true})
 
-	image := result.NewResource(&models.PageContentColumnImage{}, &admin.Config{Invisible: true})
-	image.Meta(&admin.Meta{
+	columns := result.NewResource(&models.PageContentColumn{}, &admin.Config{Invisible: true})
+	columns.Meta(&admin.Meta{
+		Name: "ColumnWidth",
+		Type: "select_one",
+		Collection: func(o interface{}, context *qor.Context) [][]string {
+			var result [][]string
+			result = append(result, []string{"col-md-6", "50% on desktop, 100% on mobile"})
+			result = append(result, []string{"col-md-12", "100% on desktop, 100% on mobile"})
+			return result
+		},
+	})
+	columns.Meta(&admin.Meta{Name: "ColumnText", Type: "rich_editor", Resource: assetManager})
+	columns.Meta(&admin.Meta{
 		Name: "Alignment",
 		Type: "select_one",
 		Collection: func(o interface{}, context *qor.Context) [][]string {
@@ -87,24 +94,19 @@ func SetupAdmin() *admin.Admin {
 			return result
 		},
 	})
-	image.NewAttrs("-PageContentColumn")
-	image.EditAttrs("-PageContentColumn")
-
-	columns := result.NewResource(&models.PageContentColumn{}, &admin.Config{Invisible: true})
-	columns.Meta(&admin.Meta{
-		Name: "Width",
-		Type: "select_one",
-		Collection: func(o interface{}, context *qor.Context) [][]string {
-			var result [][]string
-			result = append(result, []string{"col-md-6", "50% on desktop, 100% on mobile"})
-			result = append(result, []string{"col-md-12", "100% on desktop, 100% on mobile"})
-			return result
-		},
-	})
-	columns.Meta(&admin.Meta{Name: "TextContent", Type: "rich_editor", Resource: assetManager})
-	columns.Meta(&admin.Meta{Name: "ImageContent", Resource: image})
-	columns.NewAttrs("-Page")
-	columns.EditAttrs("-Page")
+	staticContentSection := &admin.Section{
+		Title: "Static Content",
+		Rows: [][]string{
+			{"ColumnText"},
+			{"Image", "Alt", "Alignment"},
+		}}
+	dynmamicContentSection := &admin.Section{
+		Title: "Dynamic Content",
+		Rows: [][]string{
+			{"Video", "Slideshow"},
+		}}
+	columns.NewAttrs("-Page", "ColumnWidth", "ColumnHeading", staticContentSection, dynmamicContentSection, "ColumnLink")
+	columns.EditAttrs("-Page", "ColumnWidth", "ColumnHeading", staticContentSection, dynmamicContentSection, "ColumnLink")
 
 	links := result.NewResource(&models.PageLink{}, &admin.Config{Invisible: true})
 	links.Meta(&admin.Meta{Name: "LinkText", Type: "rich_editor", Resource: assetManager})
@@ -157,6 +159,17 @@ func SetupAdmin() *admin.Admin {
 			},
 		})
 	}
+
+	pageSection := &admin.Section{
+		Title: "Page Setup",
+		Rows: [][]string{
+			{"Name"},
+			{"Path", "MenuWeight"},
+			{"Links"},
+		}}
+	pages.NewAttrs(pageSection, "SEO", "ContentColumns")
+	pages.EditAttrs(pageSection, "SEO", "ContentColumns")
+
 	pages.AddValidator(func(record interface{}, metaValues *resource.MetaValues, context *qor.Context) error {
 		if meta := metaValues.Get("Name"); meta != nil {
 			if name := utils.ToString(meta.Value); strings.TrimSpace(name) == "" {
@@ -183,8 +196,6 @@ func SetupAdmin() *admin.Admin {
 							imgAlt := false
 							imgAlign := false
 							for _, f := range fields {
-								fmt.Println(f.Name)
-								fmt.Println(f.Value)
 								if f.Name == "Image" && f.Value != nil {
 									if v, ok := f.Value.([]*multipart.FileHeader); ok {
 										if len(v) > 0 {
