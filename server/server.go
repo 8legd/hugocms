@@ -89,18 +89,14 @@ func ListenAndServe(port int, auth Auth, dbType DatabaseType) {
 	}
 	db.LogMode(true)
 
-	if err = config.DB.First(&models.Settings{}).Error; err != nil {
-		// error handling...
-		handleError(err)
-		if false {
-			// TODO check error, setup empty database
-			for _, table := range hugocms_qor.Tables {
-				if err := db.DropTableIfExists(table).Error; err != nil {
-					handleError(err)
-				}
-				if err := db.AutoMigrate(table).Error; err != nil {
-					handleError(err)
-				}
+	if !db.HasTable(&models.Settings{}) {
+		// setup empty database
+		for _, table := range hugocms_qor.Tables {
+			if err := db.DropTableIfExists(table).Error; err != nil {
+				handleError(err)
+			}
+			if err := db.AutoMigrate(table).Error; err != nil {
+				handleError(err)
 			}
 		}
 
