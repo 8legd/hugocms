@@ -16,9 +16,9 @@ import (
 	"github.com/qor/i18n/backends/database"
 	"github.com/qor/qor"
 
-	"github.com/8legd/HugoCMS/qor/models"
 	"github.com/8legd/hugocms/config"
 	hugocms_qor "github.com/8legd/hugocms/qor"
+	"github.com/8legd/hugocms/qor/models"
 )
 
 var SessionManager *session.Manager
