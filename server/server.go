@@ -16,23 +16,27 @@ import (
 	"github.com/qor/i18n/backends/database"
 	"github.com/qor/qor"
 
+	"github.com/8legd/HugoCMS/qor/models"
 	"github.com/8legd/hugocms/config"
 	hugocms_qor "github.com/8legd/hugocms/qor"
 )
 
 var SessionManager *session.Manager
 
-type Auth struct{}
+type Auth struct {
+	UserName string
+	Password string
+}
 
-func (Auth) LoginURL(c *admin.Context) string {
+func (a Auth) LoginURL(c *admin.Context) string {
 	return "/login"
 }
 
-func (Auth) LogoutURL(c *admin.Context) string {
+func (a Auth) LogoutURL(c *admin.Context) string {
 	return "/admin/logout"
 }
 
-func (Auth) GetCurrentUser(c *admin.Context) qor.CurrentUser {
+func (a Auth) GetCurrentUser(c *admin.Context) qor.CurrentUser {
 	w := c.Writer
 	r := c.Request
 	sess, err := SessionManager.SessionStart(w, r)
@@ -43,13 +47,13 @@ func (Auth) GetCurrentUser(c *admin.Context) qor.CurrentUser {
 
 	if r.URL.String() == "/admin/auth" &&
 		r.FormValue("inputAccount") != "" &&
-		(r.FormValue("inputAccount") == os.Getenv("HUGOCMS_ACC")) &&
+		(r.FormValue("inputAccount") == a.UserName) &&
 		r.FormValue("inputPassword") != "" &&
-		(r.FormValue("inputPassword") == os.Getenv("HUGOCMS_PWD")) {
-		sess.Set("User", r.FormValue("inputAccount"))
+		(r.FormValue("inputPassword") == a.Password) {
+		sess.Set("User", User{a.UserName})
 	}
-	if userName, ok := sess.Get("User").(string); ok && userName != "" {
-		return User{userName}
+	if u, ok := sess.Get("User").(User); ok && u.Name != "" {
+		return u
 	}
 	return nil
 }
@@ -62,17 +66,22 @@ func (u User) DisplayName() string {
 	return u.Name
 }
 
-func ListenAndServe(reset bool, dbConn string) {
+type DatabaseType int
+
+const (
+	DB_SQLite DatabaseType = iota
+	DB_MySQL
+)
+
+func ListenAndServe(port int, auth Auth, dbType DatabaseType) {
 	var db *gorm.DB
 	var err error
-	dbName := os.Getenv("HUGOCMS_DBN")
-	if dbName == "" {
-		handleError(fmt.Errorf("missing env. var. %s", "HUGOCMS_DBN"))
-	}
-	if dbConn != "" { // to use mysql instead specify a connection string through the db flag
-		db, err = gorm.Open("mysql", dbConn+"/"+dbName+"?charset=utf8&parseTime=True&loc=Local")
+
+	if dbType == DB_MySQL {
+		dbConn := fmt.Sprintf("%s:%s@tcp(127.0.0.1:3306)", auth.UserName, auth.Password)
+		db, err = gorm.Open("mysql", dbConn+"/hugocms_"+auth.UserName+"?charset=utf8&parseTime=True&loc=Local")
 	} else {
-		db, err = gorm.Open("sqlite3", dbName+".db")
+		db, err = gorm.Open("sqlite3", "hugocms_"+auth.UserName+".db")
 	}
 
 	if err != nil {
@@ -80,20 +89,25 @@ func ListenAndServe(reset bool, dbConn string) {
 	}
 	db.LogMode(true)
 
-	if reset {
-		// setup empty database
-		for _, table := range hugocms_qor.Tables {
-			if err := db.DropTableIfExists(table).Error; err != nil {
-				handleError(err)
-			}
-			if err := db.AutoMigrate(table).Error; err != nil {
-				handleError(err)
+	if err = config.DB.First(&models.Settings{}).Error; err != nil {
+		// error handling...
+		handleError(err)
+		if false {
+			// TODO check error, setup empty database
+			for _, table := range hugocms_qor.Tables {
+				if err := db.DropTableIfExists(table).Error; err != nil {
+					handleError(err)
+				}
+				if err := db.AutoMigrate(table).Error; err != nil {
+					handleError(err)
+				}
 			}
 		}
 
 	}
 
-	if err := setupConfig("qor.toml", "hugo.toml", db, Auth{}); err != nil {
+	siteName := fmt.Sprintf("%s - Hugo CMS", auth.UserName)
+	if err := setupConfig(port, siteName, db, auth); err != nil {
 		handleError(err)
 	}
 
@@ -150,25 +164,9 @@ func ListenAndServe(reset bool, dbConn string) {
 	fmt.Printf("Listening on: %v\n", config.QOR.Port)
 }
 
-func setupConfig(qorConfigFile string, hugoConfigFile string, db *gorm.DB, auth admin.Auth) error {
+func setupConfig(port int, sitename string, db *gorm.DB, auth admin.Auth) error {
 
-	qorConf := configr.New()
-	qorConf.RegisterKey("port", "QOR admin port", 8000)
-	qorConf.RegisterKey("sitename", "QOR admin site name", "QOR Admin")
-	qorConf.AddSource(configr.NewFile(qorConfigFile))
-	if err := qorConf.Parse(); err != nil {
-		return err
-	}
-	port, err := qorConf.Int("port")
-	if err != nil {
-		return err
-	}
 	config.QOR.Port = port
-
-	sitename, err := qorConf.String("sitename")
-	if err != nil {
-		return err
-	}
 	config.QOR.SiteName = sitename
 
 	// As a minumum add the root path for our site
@@ -184,6 +182,7 @@ func setupConfig(qorConfigFile string, hugoConfigFile string, db *gorm.DB, auth 
 	hugoConf.RegisterKey("disableRSS", "Hugo site disableRSS", true)
 	hugoConf.RegisterKey("menu", "Hugo site menus", make(map[string]interface{}))
 
+	hugoConfigFile := "hugo.toml"
 	hugoConf.AddSource(configr.NewFile(hugoConfigFile))
 	if err := hugoConf.Parse(); err != nil {
 		return err
