@@ -15,7 +15,7 @@ var (
 )
 
 type QORConfig struct {
-	Port     int
+	Addr     string
 	SiteName string
 	Paths    []string
 }

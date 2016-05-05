@@ -69,11 +69,12 @@ func (u User) DisplayName() string {
 type DatabaseType int
 
 const (
-	DB_SQLite DatabaseType = iota
+	_ DatabaseType = iota
+	DB_SQLite
 	DB_MySQL
 )
 
-func ListenAndServe(port int, auth Auth, dbType DatabaseType) {
+func ListenAndServe(addr string, auth Auth, dbType DatabaseType) {
 	var db *gorm.DB
 	var err error
 
@@ -103,7 +104,7 @@ func ListenAndServe(port int, auth Auth, dbType DatabaseType) {
 	}
 
 	siteName := fmt.Sprintf("%s - Hugo CMS", auth.UserName)
-	if err := setupConfig(port, siteName, db, auth); err != nil {
+	if err := setupConfig(addr, siteName, db, auth); err != nil {
 		handleError(err)
 	}
 
@@ -153,16 +154,16 @@ func ListenAndServe(port int, auth Auth, dbType DatabaseType) {
 		mux.Handle(fmt.Sprintf("/%s/", path), http.FileServer(http.Dir("static")))
 	}
 
-	if err := http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", config.QOR.Port), mux); err != nil {
+	if err := http.ListenAndServe(config.QOR.Addr, mux); err != nil {
 		handleError(err)
 	}
 
-	fmt.Printf("Listening on: %v\n", config.QOR.Port)
+	fmt.Printf("Listening on: %s\n", config.QOR.Addr)
 }
 
-func setupConfig(port int, sitename string, db *gorm.DB, auth admin.Auth) error {
+func setupConfig(addr string, sitename string, db *gorm.DB, auth admin.Auth) error {
 
-	config.QOR.Port = port
+	config.QOR.Addr = addr
 	config.QOR.SiteName = sitename
 
 	// As a minumum add the root path for our site
