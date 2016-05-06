@@ -2,8 +2,10 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -168,6 +170,12 @@ func (s *Settings) AfterSave() error {
 	if err != nil {
 		return err
 	}
+
+	cmdOutput, err := exec.Command("hugo").Output()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nRunning hugo...\n%s\n\n", cmdOutput)
 
 	return nil
 }

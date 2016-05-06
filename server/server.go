@@ -90,18 +90,23 @@ func ListenAndServe(addr string, auth Auth, dbType DatabaseType) {
 	}
 	db.LogMode(true)
 
+	// to reset to an empty database drop the settings table
 	if !db.HasTable(&models.Settings{}) {
-		// setup empty database
 		for _, table := range hugocms_qor.Tables {
 			if err := db.DropTableIfExists(table).Error; err != nil {
 				handleError(err)
 			}
-			if err := db.AutoMigrate(table).Error; err != nil {
-				handleError(err)
-			}
 		}
-
 	}
+
+	for _, table := range hugocms_qor.Tables {
+		if err := db.AutoMigrate(table).Error; err != nil {
+			handleError(err)
+		}
+	}
+
+	// Because this is a singleton a single record must already exist in the database (there is no create through QOR admin just update)
+	db.FirstOrCreate(&models.Settings{})
 
 	siteName := fmt.Sprintf("%s - Hugo CMS", auth.UserName)
 	if err := setupConfig(addr, siteName, db, auth); err != nil {
@@ -239,6 +244,22 @@ func setupConfig(addr string, sitename string, db *gorm.DB, auth admin.Auth) err
 	config.I18n = i18n.New(database.New(db))
 
 	config.Auth = auth
+
+	// to re-generate site delete `config.json`
+	if _, err := os.Stat("config.json"); os.IsNotExist(err) {
+		var s models.Settings
+		db.First(&s)
+		if err := s.AfterSave(); err != nil {
+			return err
+		}
+		var ps []models.Page
+		db.Find(&ps)
+		for _, p := range ps {
+			if err := p.AfterSave(); err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 

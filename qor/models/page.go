@@ -2,8 +2,10 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -179,6 +181,12 @@ func (p *Page) syncWrite() error {
 	if err != nil {
 		return err
 	}
+
+	cmdOutput, err := exec.Command("hugo").Output()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n\nRunning hugo...\n%s\n\n", cmdOutput)
 
 	return nil
 }

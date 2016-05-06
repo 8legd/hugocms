@@ -10,6 +10,7 @@ import (
 	"github.com/qor/qor"
 	"github.com/qor/qor/resource"
 	"github.com/qor/qor/utils"
+	"github.com/qor/roles"
 	"github.com/qor/sorting"
 	"github.com/qor/validations"
 
@@ -24,6 +25,7 @@ var (
 	videos     *admin.Resource
 	slideshows *admin.Resource
 	pages      *admin.Resource
+	releases   *admin.Resource
 )
 
 func init() {
@@ -50,6 +52,8 @@ func init() {
 		&models.PageMeta{},
 		&models.PageContentColumn{},
 		&models.PageLink{},
+
+		&models.Release{},
 	}
 
 }
@@ -116,26 +120,6 @@ func SetupAdmin() *admin.Admin {
 
 	pages = result.AddResource(&models.Page{}, &admin.Config{Name: "Pages"})
 	pages.IndexAttrs("Path", "Name")
-	pages.Meta(&admin.Meta{
-		Name: "MenuWeight",
-		Type: "select_one",
-		Collection: func(o interface{}, context *qor.Context) [][]string {
-			// Build menu weight drop down on the fly...
-			var result [][]string
-			// Check we have a path (if not set menu weight to 0)
-			if p, ok := o.(*models.Page); ok && p.Path != "" {
-				// TODO find out the current max menu weight for this path
-				//var pages []models.Page
-				//db.DB.Find(&pages)
-				result = append(result, []string{"0", "0"})
-				result = append(result, []string{"1", "1"})
-			} else {
-				result = append(result, []string{"0", "0"})
-			}
-			return result
-
-		},
-	})
 
 	pages.Meta(&admin.Meta{Name: "ContentColumns", Resource: columns})
 
@@ -247,13 +231,20 @@ func SetupAdmin() *admin.Admin {
 	callToAction := result.NewResource(&models.SettingsCallToAction{}, &admin.Config{Invisible: true})
 	callToAction.Meta(&admin.Meta{Name: "ActionText", Type: "rich_editor", Resource: assetManager})
 
-	// Because this is a singleton a single record must already exist in the database (there is no create through QOR admin just update)
-	config.DB.FirstOrCreate(&models.Settings{})
-
 	settings = result.AddResource(&models.Settings{}, &admin.Config{Singleton: true})
 	settings.Meta(&admin.Meta{Name: "ContactDetails", Resource: contact})
 	settings.Meta(&admin.Meta{Name: "CallToAction", Resource: callToAction})
 	settings.Meta(&admin.Meta{Name: "Footer", Type: "rich_editor", Resource: assetManager})
+
+	releases = result.AddResource(&models.Release{}, &admin.Config{
+		Name:       "Releases",
+		Permission: roles.Deny(roles.Delete, roles.Anyone),
+	})
+
+	releases.IndexAttrs("ID", "Date", "Comment")
+	releases.NewAttrs("Comment")
+	releases.EditAttrs("")
+	releases.ShowAttrs("ID", "Date", "Comment", "Log")
 
 	// Add Translations
 	result.AddResource(config.I18n, &admin.Config{})
