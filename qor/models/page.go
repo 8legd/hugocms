@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/8legd/hugocms/config"
 	"github.com/jinzhu/gorm"
 )
 
@@ -56,15 +57,23 @@ type PageContentColumn struct {
 
 	ColumnWidth   string
 	ColumnHeading string
-	ColumnText    string              `sql:"size:2000"`
-	Image         ContentImageStorage `sql:"type:varchar(4096)"`
-	Alt           string
-	Alignment     string
+	ColumnText    string                   `sql:"size:2000"`
+	ColumnImage   []PageContentColumnImage // We only use 1 image but a slice allows image removal
 	VideoID       uint
 	Video         Video
 	SlideshowID   uint
 	Slideshow     Slideshow
 	ColumnLink    string
+}
+
+type PageContentColumnImage struct {
+	gorm.Model
+
+	PageContentColumnID uint
+
+	Image     ContentImageStorage `sql:"type:varchar(4096)"`
+	Alt       string
+	Alignment string
 }
 
 func slug(s string) string {
@@ -104,6 +113,17 @@ func (p *Page) AfterSave() error {
 			return err
 		}
 	}
+
+	// If we have any, fetch the associated Slideshow and its Slides
+	// (We need to do this because of the way the relationships are for PageContentColumn > Slideshow > Slides)
+	for i, col := range p.ContentColumns {
+		if col.SlideshowID > 0 {
+			config.DB.First(&col.Slideshow, col.SlideshowID)
+			config.DB.Where("slideshow_id = ?", col.SlideshowID).Find(&col.Slideshow.Slides)
+			p.ContentColumns[i] = col
+		}
+	}
+
 	return p.syncWrite()
 }
 
@@ -124,6 +144,7 @@ func (p *Page) AfterDelete() error {
 
 // Syncs creation and update events for a page with Hugo
 func (p *Page) syncWrite() error {
+
 	var path = p.Path + p.Slug()
 	output, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {

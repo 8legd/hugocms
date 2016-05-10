@@ -51,6 +51,7 @@ func init() {
 		&models.Page{},
 		&models.PageMeta{},
 		&models.PageContentColumn{},
+		&models.PageContentColumnImage{},
 		&models.PageLink{},
 
 		&models.Release{},
@@ -73,19 +74,8 @@ func SetupAdmin() *admin.Admin {
 	// Add Asset Manager, for rich editor
 	assetManager := result.AddResource(&media_library.AssetManager{}, &admin.Config{Invisible: true})
 
-	columns := result.NewResource(&models.PageContentColumn{}, &admin.Config{Invisible: true})
-	columns.Meta(&admin.Meta{
-		Name: "ColumnWidth",
-		Type: "select_one",
-		Collection: func(o interface{}, context *qor.Context) [][]string {
-			var result [][]string
-			result = append(result, []string{"col-md-6", "50% on desktop, 100% on mobile"})
-			result = append(result, []string{"col-md-12", "100% on desktop, 100% on mobile"})
-			return result
-		},
-	})
-	columns.Meta(&admin.Meta{Name: "ColumnText", Type: "rich_editor", Resource: assetManager})
-	columns.Meta(&admin.Meta{
+	columnImage := result.NewResource(&models.PageContentColumnImage{}, &admin.Config{Invisible: true})
+	columnImage.Meta(&admin.Meta{
 		Name: "Alignment",
 		Type: "select_one",
 		Collection: func(o interface{}, context *qor.Context) [][]string {
@@ -99,12 +89,28 @@ func SetupAdmin() *admin.Admin {
 			return result
 		},
 	})
+	columnImage.NewAttrs("-ContentColumns")
+	columnImage.EditAttrs("-ContentColumns")
+
+	columns := result.NewResource(&models.PageContentColumn{}, &admin.Config{Invisible: true})
+	columns.Meta(&admin.Meta{
+		Name: "ColumnWidth",
+		Type: "select_one",
+		Collection: func(o interface{}, context *qor.Context) [][]string {
+			var result [][]string
+			result = append(result, []string{"col-md-6", "50% on desktop, 100% on mobile"})
+			result = append(result, []string{"col-md-12", "100% on desktop, 100% on mobile"})
+			return result
+		},
+	})
+	columns.Meta(&admin.Meta{Name: "ColumnText", Type: "rich_editor", Resource: assetManager})
 	staticContentSection := &admin.Section{
 		Title: "Static Content",
 		Rows: [][]string{
 			{"ColumnText"},
-			{"Image", "Alt", "Alignment"},
+			{"ColumnImage"},
 		}}
+	columns.Meta(&admin.Meta{Name: "ColumnImage", Resource: columnImage})
 	dynmamicContentSection := &admin.Section{
 		Title: "Dynamic Content",
 		Rows: [][]string{
