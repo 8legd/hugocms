@@ -103,7 +103,7 @@ func (p *Page) AfterSave() error {
 	if p.prevPath != "" && (p.prevPath != p.Path || p.prevName != p.Name) {
 		// Remove content file from Hugo but rename data files in case we ever need to restore :)
 		// TODO use hugo config to get content dir
-		filename := "content" + p.prevPath + p.PrevSlug() + ".json"
+		filename := "content" + p.prevPath + p.PrevSlug() + ".html"
 		if err := os.Remove(filename); err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func (p *Page) syncWrite() error {
 		"  ",
 	)
 	// TODO use hugo config to get content dir
-	contentFile := "content" + path + ".json"
+	contentFile := "content" + path + ".html"
 	// If required, create content dir first
 	if _, err := os.Stat("./content"); os.IsNotExist(err) {
 		err = os.MkdirAll("./content", os.ModePerm)
