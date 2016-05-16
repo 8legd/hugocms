@@ -160,6 +160,12 @@ func (p *Page) syncWrite() error {
 			return err
 		}
 	}
+	if _, err := os.Stat("./data" + p.Path); os.IsNotExist(err) {
+		err = os.MkdirAll("./data"+p.Path, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
 	err = ioutil.WriteFile(dataFile, output, 0644)
 	if err != nil {
 		return err
@@ -194,6 +200,12 @@ func (p *Page) syncWrite() error {
 	// If required, create content dir first
 	if _, err := os.Stat("./content"); os.IsNotExist(err) {
 		err = os.MkdirAll("./content", os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat("./content" + p.Path); os.IsNotExist(err) {
+		err = os.MkdirAll("./content"+p.Path, os.ModePerm)
 		if err != nil {
 			return err
 		}
