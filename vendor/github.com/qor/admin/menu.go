@@ -1,14 +1,27 @@
 package admin
 
-import "path"
+import (
+	"path"
+
+	"github.com/qor/qor"
+	"github.com/qor/roles"
+)
 
 // Menu qor admin sidebar menus definiation
 type Menu struct {
-	Name      string
-	Link      string
-	Ancestors []string
-	subMenus  []*Menu
-	rawPath   string
+	Name       string
+	Link       string
+	Ancestors  []string
+	Permission *roles.Permission
+	subMenus   []*Menu
+	rawPath    string
+}
+
+func (menu Menu) HasPermission(mode roles.PermissionMode, context *qor.Context) bool {
+	if menu.Permission == nil {
+		return true
+	}
+	return menu.Permission.HasPermission(mode, context.Roles...)
 }
 
 // GetMenus get menus for admin sidebar

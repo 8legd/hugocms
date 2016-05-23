@@ -11,29 +11,29 @@ import (
 
 	"github.com/qor/i18n"
 	"github.com/qor/media_library"
-	"github.com/qor/admin"
 	"github.com/qor/worker"
 )
 
 // RegisterExchangeJobs register i18n jobs into worker
 func RegisterExchangeJobs(I18n *i18n.I18n, Worker *worker.Worker) {
-	admin.RegisterViewPath("github.com/qor/i18n/exchange_actions/views")
+	Worker.Admin.RegisterViewPath("github.com/qor/i18n/exchange_actions/views")
 
 	Worker.RegisterJob(&worker.Job{
 		Name:  "Export Translations",
 		Group: "Export/Import Translations From CSV file",
 		Handler: func(arg interface{}, qorJob worker.QorJobInterface) (err error) {
 			var (
-				locales         []string
-				translationKeys []string
-				translationsMap = map[string]bool{}
-				filename        = fmt.Sprintf("/downloads/translations.%v.csv", time.Now().UnixNano())
-				fullFilename    = path.Join("public", filename)
+				locales          []string
+				translationKeys  []string
+				translationsMap  = map[string]bool{}
+				filename         = fmt.Sprintf("/downloads/translations.%v.csv", time.Now().UnixNano())
+				fullFilename     = path.Join("public", filename)
+				i18nTranslations = I18n.LoadTranslations()
 			)
 			qorJob.AddLog("Exporting translations...")
 
 			// Sort locales
-			for locale := range I18n.Translations {
+			for locale := range i18nTranslations {
 				locales = append(locales, locale)
 			}
 			sort.Strings(locales)
@@ -55,7 +55,7 @@ func RegisterExchangeJobs(I18n *i18n.I18n, Worker *worker.Worker) {
 
 			// Sort translation keys
 			for _, locale := range locales {
-				for key := range I18n.Translations[locale] {
+				for key := range i18nTranslations[locale] {
 					translationsMap[key] = true
 				}
 			}
@@ -70,7 +70,7 @@ func RegisterExchangeJobs(I18n *i18n.I18n, Worker *worker.Worker) {
 				var translations = []string{translationKey}
 				for _, locale := range locales {
 					var value string
-					if translation := I18n.Translations[locale][translationKey]; translation != nil {
+					if translation := i18nTranslations[locale][translationKey]; translation != nil {
 						value = translation.Value
 					}
 					translations = append(translations, value)

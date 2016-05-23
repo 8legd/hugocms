@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
+	
 	"github.com/adrianduke/configr"
 	_ "github.com/adrianduke/configr/sources/file/toml"
 	"github.com/astaxie/beego/session"
@@ -163,6 +163,11 @@ func ListenAndServe(addr string, auth Auth, dbType DatabaseType) {
 		handleError(err)
 	}
 
+	// to re-generate site delete `config.json`
+	if _, err := os.Stat("config.json"); os.IsNotExist(err) {
+		hugocms_qor.CallSave(adm)
+	}
+
 	fmt.Printf("Listening on: %s\n", config.QOR.Addr)
 }
 
@@ -244,22 +249,6 @@ func setupConfig(addr string, sitename string, db *gorm.DB, auth admin.Auth) err
 	config.I18n = i18n.New(database.New(db))
 
 	config.Auth = auth
-
-	// to re-generate site delete `config.json`
-	if _, err := os.Stat("config.json"); os.IsNotExist(err) {
-		var s models.Settings
-		db.First(&s)
-		if err := s.AfterSave(); err != nil {
-			return err
-		}
-		var ps []models.Page
-		db.Find(&ps)
-		for _, p := range ps {
-			if err := p.AfterSave(); err != nil {
-				return err
-			}
-		}
-	}
 
 	return nil
 

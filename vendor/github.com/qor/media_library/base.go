@@ -82,6 +82,13 @@ func (b *Base) Scan(data interface{}) (err error) {
 	default:
 		err = errors.New("unsupported driver -> Scan pair for MediaLibrary")
 	}
+
+	// If image is deleted, then clean up all values, for serialized fields
+	if b.Delete {
+		b.Url = ""
+		b.FileName = ""
+		b.CropOptions = nil
+	}
 	return
 }
 
@@ -198,6 +205,10 @@ func (b Base) IsImage() bool {
 	return err == nil
 }
 
+func init() {
+	admin.RegisterViewPath("github.com/qor/media_library/views")
+}
+
 // ConfigureQorMetaBeforeInitialize configure this field for Qor Admin
 func (Base) ConfigureQorMetaBeforeInitialize(meta resource.Metaor) {
 	if meta, ok := meta.(*admin.Meta); ok {
@@ -208,8 +219,6 @@ func (Base) ConfigureQorMetaBeforeInitialize(meta resource.Metaor) {
 				return utils.Stringify(meta.GetValuer()(value, context))
 			})
 		}
-
-		admin.RegisterViewPath("github.com/qor/media_library/views")
 	}
 }
 

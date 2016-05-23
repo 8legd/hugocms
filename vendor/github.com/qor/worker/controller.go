@@ -65,13 +65,7 @@ func (wc workerController) Update(context *admin.Context) {
 func (wc workerController) AddJob(context *admin.Context) {
 	jobResource := wc.Worker.JobResource
 	result := jobResource.NewStruct().(QorJobInterface)
-
-	var job *Job
-	for _, j := range wc.Worker.Jobs {
-		if j.Name == context.Request.Form.Get("job_name") {
-			job = j
-		}
-	}
+	job := wc.Worker.GetRegisteredJob(context.Request.Form.Get("job_name"))
 	result.SetJob(job)
 
 	if context.AddError(jobResource.Decode(context.Context, result)); !context.HasError() {
@@ -79,6 +73,15 @@ func (wc workerController) AddJob(context *admin.Context) {
 		result.SetJob(job)
 		context.AddError(jobResource.CallSave(result, context.Context))
 		context.AddError(wc.Worker.AddJob(result))
+	} else {
+		responder.With("html", func() {
+			context.Writer.WriteHeader(422)
+			context.Execute("edit", result)
+		}).With("json", func() {
+			context.Writer.WriteHeader(422)
+			context.JSON("index", map[string]interface{}{"errors": context.GetErrors()})
+		}).Respond(context.Request)
+		return
 	}
 
 	if !context.HasError() {

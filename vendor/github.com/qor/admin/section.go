@@ -24,7 +24,7 @@ import (
 //      "ColorVariations",
 //    }
 type Section struct {
-	Resource Resource
+	Resource *Resource
 	Title    string
 	Rows     [][]string
 }
@@ -59,7 +59,7 @@ func (res *Resource) generateSections(values ...interface{}) []*Section {
 
 	sections = reverseSections(sections)
 	for _, section := range sections {
-		section.Resource = *res
+		section.Resource = res
 	}
 	return sections
 }
