@@ -6,3 +6,5 @@ vendor:
 	@gvt fetch github.com/mattn/go-sqlite3
 	@gvt fetch github.com/qor/admin
 	@gvt fetch github.com/qor/i18n
+	@gvt fetch github.com/qor/sorting
+	@gvt fetch github.com/qor/validations
