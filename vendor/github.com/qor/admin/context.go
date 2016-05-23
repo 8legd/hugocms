@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/qor/qor"
@@ -61,77 +59,60 @@ func (context *Context) setResource(res *Resource) *Context {
 	return context
 }
 
-// Template
-func (context *Context) getViewPaths() (paths []string) {
-	var dirs = []string{context.resourcePath(), path.Join("themes", "default"), "."}
-	var themes []string
+func (context *Context) Asset(layouts ...string) ([]byte, error) {
+	var prefixes, themes []string
 
 	if context.Request != nil {
 		if theme := context.Request.URL.Query().Get("theme"); theme != "" {
-			themePath := path.Join("themes", theme)
-			themes = append(themes, []string{path.Join(themePath, context.resourcePath()), themePath}...)
+			themes = append(themes, theme)
 		}
 	}
 
-	if context.Resource != nil {
-		for _, theme := range context.Resource.Config.Themes {
-			themePath := path.Join("themes", theme)
-			themes = append(themes, []string{path.Join(themePath, context.resourcePath()), themePath}...)
-		}
+	if len(themes) == 0 && context.Resource != nil {
+		themes = append(themes, context.Resource.Config.Themes...)
 	}
 
-	for _, p := range append(themes, dirs...) {
-		for _, d := range viewPaths {
-			if context.Action != "" {
-				if isExistingDir(path.Join(d, p, context.Action)) {
-					paths = append(paths, path.Join(d, p, context.Action))
-				}
-			}
-
-			if isExistingDir(path.Join(d, p)) {
-				paths = append(paths, path.Join(d, p))
-			}
+	if resourcePath := context.resourcePath(); resourcePath != "" {
+		for _, theme := range themes {
+			prefixes = append(prefixes, filepath.Join("themes", theme, resourcePath))
 		}
+		prefixes = append(prefixes, resourcePath)
 	}
-	return paths
-}
 
-func (context *Context) findFile(layout string) (string, error) {
-	for _, p := range context.getViewPaths() {
-		if _, err := os.Stat(path.Join(p, layout)); !os.IsNotExist(err) {
-			return path.Join(p, layout), nil
-		}
+	for _, theme := range themes {
+		prefixes = append(prefixes, filepath.Join("themes", theme))
 	}
-	return "", errors.New("file not found")
-}
 
-// FindTemplate find template based on context
-func (context *Context) FindTemplate(layouts ...string) (string, error) {
 	for _, layout := range layouts {
-		for _, p := range context.getViewPaths() {
-			if _, err := os.Stat(filepath.Join(p, layout)); !os.IsNotExist(err) {
-				return filepath.Join(p, layout), nil
+		for _, prefix := range prefixes {
+			if content, err := context.Admin.AssetFS.Asset(filepath.Join(prefix, layout)); err == nil {
+				return content, nil
 			}
 		}
+
+		if content, err := context.Admin.AssetFS.Asset(layout); err == nil {
+			return content, nil
+		}
 	}
-	return "", fmt.Errorf("template not found: %v", layouts)
+
+	return []byte(""), fmt.Errorf("template not found: %v", layouts)
 }
 
 // Render render template based on context
 func (context *Context) Render(name string, results ...interface{}) template.HTML {
 	var (
-		err  error
-		file = name
+		err     error
+		content []byte
 	)
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.New(fmt.Sprintf("Get error when render file %v: %v", file, r))
+			err = errors.New(fmt.Sprintf("Get error when render file %v: %v", name, r))
 			utils.ExitWithMsg(err)
 		}
 	}()
 
-	if file, err = context.FindTemplate(name + ".tmpl"); err == nil {
+	if content, err = context.Asset(name + ".tmpl"); err == nil {
 		var clone = context.clone()
 		var result = bytes.NewBufferString("")
 
@@ -140,7 +121,7 @@ func (context *Context) Render(name string, results ...interface{}) template.HTM
 		}
 
 		var tmpl *template.Template
-		if tmpl, err = template.New(filepath.Base(file)).Funcs(clone.FuncMap()).ParseFiles(file); err == nil {
+		if tmpl, err = template.New(filepath.Base(name)).Funcs(clone.FuncMap()).Parse(string(content)); err == nil {
 			if err = tmpl.Execute(result, clone); err == nil {
 				return template.HTML(result.String())
 			}
@@ -153,7 +134,6 @@ func (context *Context) Render(name string, results ...interface{}) template.HTM
 // Execute execute template with layout
 func (context *Context) Execute(name string, result interface{}) {
 	var tmpl *template.Template
-	var cacheKey string
 
 	if name == "show" && !context.Resource.isSetShowAttrs {
 		name = "edit"
@@ -163,30 +143,20 @@ func (context *Context) Execute(name string, result interface{}) {
 		context.Action = name
 	}
 
-	if context.Resource != nil {
-		cacheKey = path.Join(context.resourcePath(), name)
-	} else {
-		cacheKey = name
-	}
-
-	if t, ok := templates[cacheKey]; !ok || true {
-		if file, err := context.FindTemplate("layout.tmpl"); err == nil {
-			if tmpl, err = template.New(filepath.Base(file)).Funcs(context.FuncMap()).ParseFiles(file); err == nil {
-				for _, name := range []string{"header", "footer"} {
-					if tmpl.Lookup(name) == nil {
-						if file, err := context.FindTemplate(name + ".tmpl"); err == nil {
-							tmpl.ParseFiles(file)
-						}
-					} else {
-						utils.ExitWithMsg(err)
+	if content, err := context.Asset("layout.tmpl"); err == nil {
+		if tmpl, err = template.New("layout").Funcs(context.FuncMap()).Parse(string(content)); err == nil {
+			for _, name := range []string{"header", "footer"} {
+				if tmpl.Lookup(name) == nil {
+					if content, err := context.Asset(name + ".tmpl"); err == nil {
+						tmpl.Parse(string(content))
 					}
+				} else {
+					utils.ExitWithMsg(err)
 				}
-			} else {
-				utils.ExitWithMsg(err)
 			}
+		} else {
+			utils.ExitWithMsg(err)
 		}
-	} else {
-		tmpl = t
 	}
 
 	context.Result = result

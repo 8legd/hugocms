@@ -257,3 +257,8 @@ func SetupAdmin() *admin.Admin {
 
 	return result
 }
+
+func CallSave( *admin.Admin) error {
+	// TODO try using resource Call.Save to save settings and pages for site
+	return nil
+}

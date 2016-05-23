@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html"
 	"html/template"
-	"os"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -177,8 +176,8 @@ func (context *Context) renderSections(value interface{}, sections []*Section, p
 			"Title": template.HTML(section.Title),
 			"Rows":  rows,
 		}
-		if file, err := context.FindTemplate("metas/section.tmpl"); err == nil {
-			if tmpl, err := template.New(filepath.Base(file)).Funcs(context.FuncMap()).ParseFiles(file); err == nil {
+		if content, err := context.Asset("metas/section.tmpl"); err == nil {
+			if tmpl, err := template.New("section").Funcs(context.FuncMap()).Parse(string(content)); err == nil {
 				tmpl.Execute(writer, data)
 			}
 		}
@@ -219,14 +218,14 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 
 	funcsMap["render_form"] = generateNestedRenderSections("form")
 
-	if file, err := context.FindTemplate(fmt.Sprintf("metas/%v/%v.tmpl", metaType, meta.Name), fmt.Sprintf("metas/%v/%v.tmpl", metaType, meta.Type)); err == nil {
+	if content, err := context.Asset(fmt.Sprintf("metas/%v/%v.tmpl", metaType, meta.Name), fmt.Sprintf("metas/%v/%v.tmpl", metaType, meta.Type)); err == nil {
 		defer func() {
 			if r := recover(); r != nil {
-				writer.Write([]byte(fmt.Sprintf("Get error when render template %v meta %v: %v", file, meta.Name, r)))
+				writer.Write([]byte(fmt.Sprintf("Get error when render template for meta %v: %v", meta.Name, r)))
 			}
 		}()
 
-		tmpl, err = template.New(filepath.Base(file)).Funcs(funcsMap).ParseFiles(file)
+		tmpl, err = template.New(meta.Type + ".tmpl").Funcs(funcsMap).Parse(string(content))
 	} else {
 		tmpl, err = template.New(meta.Type + ".tmpl").Funcs(funcsMap).Parse("{{.Value}}")
 	}
@@ -258,9 +257,39 @@ func (context *Context) renderMeta(meta *Meta, value interface{}, prefix []strin
 	}
 }
 
+func (context *Context) isEqual(value interface{}, hasValue interface{}) bool {
+	var result string
+
+	if reflect.Indirect(reflect.ValueOf(hasValue)).Kind() == reflect.Struct {
+		scope := &gorm.Scope{Value: hasValue}
+		result = fmt.Sprint(scope.PrimaryKeyValue())
+	} else {
+		result = fmt.Sprint(hasValue)
+	}
+
+	reflectValue := reflect.Indirect(reflect.ValueOf(value))
+	if reflectValue.Kind() == reflect.Struct {
+		scope := &gorm.Scope{Value: value}
+		return fmt.Sprint(scope.PrimaryKeyValue()) == result
+	} else if reflectValue.Kind() == reflect.String {
+		return reflectValue.Interface().(string) == result
+	} else {
+		return fmt.Sprint(reflectValue.Interface()) == result
+	}
+}
+
 func (context *Context) isIncluded(value interface{}, hasValue interface{}) bool {
+	var result string
+	if reflect.Indirect(reflect.ValueOf(hasValue)).Kind() == reflect.Struct {
+		scope := &gorm.Scope{Value: hasValue}
+		result = fmt.Sprint(scope.PrimaryKeyValue())
+	} else {
+		result = fmt.Sprint(hasValue)
+	}
+
 	primaryKeys := []interface{}{}
 	reflectValue := reflect.Indirect(reflect.ValueOf(value))
+
 	if reflectValue.Kind() == reflect.Slice {
 		for i := 0; i < reflectValue.Len(); i++ {
 			if value := reflectValue.Index(i); value.IsValid() {
@@ -276,13 +305,13 @@ func (context *Context) isIncluded(value interface{}, hasValue interface{}) bool
 		scope := &gorm.Scope{Value: value}
 		primaryKeys = append(primaryKeys, scope.PrimaryKeyValue())
 	} else if reflectValue.Kind() == reflect.String {
-		return strings.Contains(reflectValue.Interface().(string), fmt.Sprintf("%v", hasValue))
+		return strings.Contains(reflectValue.Interface().(string), result)
 	} else if reflectValue.IsValid() {
 		primaryKeys = append(primaryKeys, reflect.Indirect(reflectValue).Interface())
 	}
 
 	for _, key := range primaryKeys {
-		if fmt.Sprintf("%v", hasValue) == fmt.Sprintf("%v", key) {
+		if fmt.Sprint(key) == result {
 			return true
 		}
 	}
@@ -332,14 +361,16 @@ func (context *Context) getMenus() (menus []*menu) {
 
 	addMenu = func(parent *menu, menus []*Menu) {
 		for _, m := range menus {
-			var menu = &menu{Menu: m}
-			if strings.HasPrefix(context.Request.URL.Path, m.Link) && len(m.Link) > mostMatchedLength {
-				mostMatchedMenu = menu
-				mostMatchedLength = len(m.Link)
-			}
+			if m.HasPermission(roles.Read, context.Context) {
+				var menu = &menu{Menu: m}
+				if strings.HasPrefix(context.Request.URL.Path, m.Link) && len(m.Link) > mostMatchedLength {
+					mostMatchedMenu = menu
+					mostMatchedLength = len(m.Link)
+				}
 
-			addMenu(menu, menu.GetSubMenus())
-			parent.SubMenus = append(parent.SubMenus, menu)
+				addMenu(menu, menu.GetSubMenus())
+				parent.SubMenus = append(parent.SubMenus, menu)
+			}
 		}
 	}
 
@@ -423,6 +454,13 @@ type Page struct {
 	Current    bool
 	IsPrevious bool
 	IsNext     bool
+	IsFirst    bool
+	IsLast     bool
+}
+
+type PaginationResult struct {
+	Pagination Pagination
+	Pages      []Page
 }
 
 const visiblePageCount = 8
@@ -437,9 +475,10 @@ const visiblePageCount = 8
 // When current page is 10
 // [prev, 5, 6, 7, 8, 9, current, 11, 12]
 // If total page count less than VISIBLE_PAGE_COUNT, always show all pages
-func (context *Context) Pagination() *[]Page {
+func (context *Context) Pagination() *PaginationResult {
+	var pages []Page
 	pagination := context.Searcher.Pagination
-	if pagination.Pages <= 1 {
+	if pagination.Total < context.Searcher.Resource.Config.PageCount {
 		return nil
 	}
 
@@ -460,9 +499,9 @@ func (context *Context) Pagination() *[]Page {
 		start = 1
 	}
 
-	var pages []Page
 	// Append prev link
 	if start > 1 {
+		pages = append(pages, Page{Page: 1, IsFirst: true})
 		pages = append(pages, Page{Page: start - 1, IsPrevious: true})
 	}
 
@@ -473,9 +512,10 @@ func (context *Context) Pagination() *[]Page {
 	// Append next link
 	if end < pagination.Pages {
 		pages = append(pages, Page{Page: end + 1, IsNext: true})
+		pages = append(pages, Page{Page: pagination.Pages, IsLast: true})
 	}
 
-	return &pages
+	return &PaginationResult{Pagination: pagination, Pages: pages}
 }
 
 // PatchCurrentURL is a convinent wrapper for qor/utils.PatchURL
@@ -526,12 +566,9 @@ func (context *Context) getThemes() (themes []string) {
 func (context *Context) loadThemeStyleSheets() template.HTML {
 	var results []string
 	for _, theme := range context.getThemes() {
-		var file = path.Join("assets", "stylesheets", theme+".css")
-		for _, view := range context.getViewPaths() {
-			if _, err := os.Stat(path.Join(view, file)); err == nil {
-				results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s?theme=%s">`, path.Join(context.Admin.GetRouter().Prefix, file), theme))
-				break
-			}
+		var file = path.Join("themes", theme, "assets", "stylesheets", theme+".css")
+		if _, err := context.Asset(file); err == nil {
+			results = append(results, fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s?theme=%s">`, path.Join(context.Admin.GetRouter().Prefix, "assets", "stylesheets", theme+".css"), theme))
 		}
 	}
 
@@ -541,12 +578,9 @@ func (context *Context) loadThemeStyleSheets() template.HTML {
 func (context *Context) loadThemeJavaScripts() template.HTML {
 	var results []string
 	for _, theme := range context.getThemes() {
-		var file = path.Join("assets", "javascripts", theme+".js")
-		for _, view := range context.getViewPaths() {
-			if _, err := os.Stat(path.Join(view, file)); err == nil {
-				results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, path.Join(context.Admin.GetRouter().Prefix, file), theme))
-				break
-			}
+		var file = path.Join("themes", theme, "assets", "javascripts", theme+".js")
+		if _, err := context.Asset(file); err == nil {
+			results = append(results, fmt.Sprintf(`<script src="%s?theme=%s"></script>`, path.Join(context.Admin.GetRouter().Prefix, "assets", "javascripts", theme+".js"), theme))
 		}
 	}
 
@@ -560,10 +594,8 @@ func (context *Context) loadAdminJavaScripts() template.HTML {
 	}
 
 	var file = path.Join("assets", "javascripts", strings.ToLower(strings.Replace(siteName, " ", "_", -1))+".js")
-	for _, view := range context.getViewPaths() {
-		if _, err := os.Stat(path.Join(view, file)); err == nil {
-			return template.HTML(fmt.Sprintf(`<script src="%s"></script>`, path.Join(context.Admin.GetRouter().Prefix, file)))
-		}
+	if _, err := context.Asset(file); err == nil {
+		return template.HTML(fmt.Sprintf(`<script src="%s"></script>`, path.Join(context.Admin.GetRouter().Prefix, file)))
 	}
 	return ""
 }
@@ -575,31 +607,48 @@ func (context *Context) loadAdminStyleSheets() template.HTML {
 	}
 
 	var file = path.Join("assets", "stylesheets", strings.ToLower(strings.Replace(siteName, " ", "_", -1))+".css")
-	for _, view := range context.getViewPaths() {
-		if _, err := os.Stat(path.Join(view, file)); err == nil {
-			return template.HTML(fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s">`, path.Join(context.Admin.GetRouter().Prefix, file)))
-		}
+	if _, err := context.Asset(file); err == nil {
+		return template.HTML(fmt.Sprintf(`<link type="text/css" rel="stylesheet" href="%s">`, path.Join(context.Admin.GetRouter().Prefix, file)))
 	}
 	return ""
 }
 
 func (context *Context) loadActions(action string) template.HTML {
-	var actions = map[string]string{}
-	var actionKeys = []string{}
-	var viewPaths = context.getViewPaths()
+	var (
+		actionKeys, actionFiles []string
+		actions                 = map[string]string{}
+	)
 
-	for j := len(viewPaths); j > 0; j-- {
-		view := viewPaths[j-1]
-		globalfiles, _ := filepath.Glob(path.Join(view, "actions/*.tmpl"))
-		files, _ := filepath.Glob(path.Join(view, "actions", action, "*.tmpl"))
-
-		for _, file := range append(globalfiles, files...) {
-			base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(path.Base(file), "")
-			if _, ok := actions[base]; !ok {
-				actionKeys = append(actionKeys, path.Base(file))
-			}
-			actions[base] = file
+	for _, pattern := range []string{"actions/*.tmpl", filepath.Join("actions", action, "*.tmpl")} {
+		if matches, err := context.Admin.AssetFS.Glob(pattern); err == nil {
+			actionFiles = append(actionFiles, matches...)
 		}
+
+		if resourcePath := context.resourcePath(); resourcePath != "" {
+			if matches, err := context.Admin.AssetFS.Glob(filepath.Join(resourcePath, pattern)); err == nil {
+				actionFiles = append(actionFiles, matches...)
+			}
+		}
+
+		for _, theme := range context.getThemes() {
+			if matches, err := context.Admin.AssetFS.Glob(filepath.Join("themes", theme, pattern)); err == nil {
+				actionFiles = append(actionFiles, matches...)
+			}
+
+			if resourcePath := context.resourcePath(); resourcePath != "" {
+				if matches, err := context.Admin.AssetFS.Glob(filepath.Join("themes", theme, resourcePath, pattern)); err == nil {
+					actionFiles = append(actionFiles, matches...)
+				}
+			}
+		}
+	}
+
+	for _, actionFile := range actionFiles {
+		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(path.Base(actionFile), "")
+		if _, ok := actions[base]; !ok {
+			actionKeys = append(actionKeys, path.Base(actionFile))
+		}
+		actions[base] = actionFile
 	}
 
 	sort.Strings(actionKeys)
@@ -615,11 +664,15 @@ func (context *Context) loadActions(action string) template.HTML {
 		}()
 
 		base := regexp.MustCompile("^\\d+\\.").ReplaceAllString(key, "")
-		file := actions[base]
-		if tmpl, err := template.New(filepath.Base(file)).Funcs(context.FuncMap()).ParseFiles(file); err == nil {
-			if err := tmpl.Execute(result, context); err != nil {
-				utils.ExitWithMsg(err)
+		if content, err := context.Asset(actions[base]); err == nil {
+			if tmpl, err := template.New(filepath.Base(actions[base])).Funcs(context.FuncMap()).Parse(string(content)); err == nil {
+				if err := tmpl.Execute(result, context); err != nil {
+					result.WriteString(err.Error())
+					utils.ExitWithMsg(err)
+				}
+			} else {
 				result.WriteString(err.Error())
+				utils.ExitWithMsg(err)
 			}
 		}
 	}
@@ -637,7 +690,7 @@ func (context *Context) logoutURL() string {
 func (context *Context) t(values ...interface{}) template.HTML {
 	switch len(values) {
 	case 1:
-		return context.Admin.T(context.Context, fmt.Sprint(values[0]), "")
+		return context.Admin.T(context.Context, fmt.Sprint(values[0]), fmt.Sprint(values[0]))
 	case 2:
 		return context.Admin.T(context.Context, fmt.Sprint(values[0]), fmt.Sprint(values[1]))
 	case 3:
@@ -755,6 +808,7 @@ func (context *Context) FuncMap() template.FuncMap {
 		"get_resource":         context.Admin.GetResource,
 		"new_resource_context": context.NewResourceContext,
 		"is_new_record":        context.isNewRecord,
+		"is_equal":             context.isEqual,
 		"is_included":          context.isIncluded,
 		"primary_key_of":       context.primaryKeyOf,
 		"formatted_value_of":   context.FormattedValueOf,

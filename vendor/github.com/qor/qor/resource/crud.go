@@ -35,7 +35,7 @@ func (res *Resource) findOneHandler(result interface{}, metaValues *MetaValues, 
 					}
 				}
 			}
-			return context.GetDB().First(result, fmt.Sprintf("%v = ?", scope.Quote(primaryField.DBName)), primaryKey).Error
+			return context.GetDB().First(result, fmt.Sprintf("%v.%v = ?", scope.QuotedTableName(), scope.Quote(primaryField.DBName)), primaryKey).Error
 		}
 		return errors.New("failed to find")
 	}
@@ -58,7 +58,17 @@ func (res *Resource) saveHandler(result interface{}, context *qor.Context) error
 	if (context.GetDB().NewScope(result).PrimaryKeyZero() &&
 		res.HasPermission(roles.Create, context)) || // has create permission
 		res.HasPermission(roles.Update, context) { // has update permission
-		return context.GetDB().Save(result).Error
+		results := context.GetDB().Save(result)
+
+		if results.RowsAffected == 0 {
+			primaryField := context.GetDB().NewScope(result).PrimaryField()
+			// if primary field has value and it is not a auto increment field, then create it if nothing updated
+			if _, ok := primaryField.TagSettings["AUTO_INCREMENT"]; !primaryField.IsBlank && !ok {
+				return context.GetDB().Create(result).Error
+			}
+		}
+
+		return results.Error
 	}
 	return roles.ErrPermissionDenied
 }

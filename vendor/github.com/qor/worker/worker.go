@@ -64,7 +64,7 @@ type Worker struct {
 // ConfigureQorResourceBeforeInitialize a method used to config Worker for qor admin
 func (worker *Worker) ConfigureQorResourceBeforeInitialize(res resource.Resourcer) {
 	if res, ok := res.(*admin.Resource); ok {
-		admin.RegisterViewPath("github.com/qor/worker/views")
+		res.GetAdmin().RegisterViewPath("github.com/qor/worker/views")
 		res.UseTheme("worker")
 
 		worker.Admin = res.GetAdmin()
@@ -124,9 +124,11 @@ func (worker *Worker) ConfigureQorResourceBeforeInitialize(res resource.Resource
 func (worker *Worker) ConfigureQorResource(res resource.Resourcer) {
 	if res, ok := res.(*admin.Resource); ok {
 		// Parse job
-		var qorJobID = flag.String("qor-job", "", "Qor Job ID")
-		var runAnother = flag.Bool("run-another", false, "Run another qor job")
-		flag.Parse()
+		cmdLine := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		qorJobID := cmdLine.String("qor-job", "", "Qor Job ID")
+		runAnother := cmdLine.Bool("run-another", false, "Run another qor job")
+		cmdLine.Parse(os.Args[1:])
+
 		if *qorJobID != "" {
 			if *runAnother == true {
 				if newJob := worker.saveAnotherJob(*qorJobID); newJob != nil {
@@ -183,6 +185,16 @@ func (worker *Worker) SetQueue(queue Queue) {
 func (worker *Worker) RegisterJob(job *Job) error {
 	job.Worker = worker
 	worker.Jobs = append(worker.Jobs, job)
+	return nil
+}
+
+// GetRegisteredJob register a job into Worker
+func (worker *Worker) GetRegisteredJob(name string) *Job {
+	for _, job := range worker.Jobs {
+		if job.Name == name {
+			return job
+		}
+	}
 	return nil
 }
 

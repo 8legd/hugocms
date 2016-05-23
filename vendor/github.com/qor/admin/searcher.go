@@ -16,7 +16,7 @@ type Pagination struct {
 	Total       int
 	Pages       int
 	CurrentPage int
-	PrePage     int
+	PerPage     int
 }
 
 // Searcher is used to search results
@@ -37,9 +37,9 @@ func (s *Searcher) Page(num int) *Searcher {
 	return s
 }
 
-// PrePage set pre page count
-func (s *Searcher) PrePage(num int) *Searcher {
-	s.Pagination.PrePage = num
+// PerPage set pre page count
+func (s *Searcher) PerPage(num int) *Searcher {
+	s.Pagination.PerPage = num
 	return s
 }
 
@@ -179,14 +179,18 @@ func (s *Searcher) parseContext() *qor.Context {
 		}
 	}
 
-	if s.Pagination.PrePage == 0 {
-		s.Pagination.PrePage = s.Resource.Config.PageCount
+	if s.Pagination.PerPage == 0 {
+		if perPage, err := strconv.Atoi(s.Context.Request.Form.Get("per_page")); err == nil {
+			s.Pagination.PerPage = perPage
+		} else {
+			s.Pagination.PerPage = s.Resource.Config.PageCount
+		}
 	}
 
 	if s.Pagination.CurrentPage > 0 {
-		s.Pagination.Pages = (s.Pagination.Total-1)/s.Pagination.PrePage + 1
+		s.Pagination.Pages = (s.Pagination.Total-1)/s.Pagination.PerPage + 1
 
-		db = db.Limit(s.Pagination.PrePage).Offset((s.Pagination.CurrentPage - 1) * s.Pagination.PrePage)
+		db = db.Limit(s.Pagination.PerPage).Offset((s.Pagination.CurrentPage - 1) * s.Pagination.PerPage)
 	}
 
 	context.SetDB(db)
