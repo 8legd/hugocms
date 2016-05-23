@@ -70,6 +70,7 @@ func SetupAdmin() *admin.Admin {
 
 	result.SetSiteName(config.QOR.SiteName)
 	result.SetAuth(config.Auth)
+	//result.RegisterViewPath("/home/drew/GoWork/src/github.com/8legd/hugocms/vendor/github.com/qor/admin/views")
 
 	// Add Asset Manager, for rich editor
 	assetManager := result.AddResource(&media_library.AssetManager{}, &admin.Config{Invisible: true})
